@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diag_title">Diagnostics</string>
+    <string name="diag_row_hint">What the app has been doing, to copy and send when something breaks.</string>
+    <string name="diag_hint">The app keeps a recent log of what it does and why. If something goes wrong, copy it and paste it into the chat or the issue.</string>
+    <string name="diag_privacy">No names of children, schools or venues: only internal numbers. The log takes at most about 0.5 MB and recycles itself.</string>
+    <string name="diag_copy">Copy</string>
+    <string name="diag_copy_quick">Copy the diagnostics</string>
+    <string name="diag_share">Share…</string>
+    <string name="diag_clear">Clear log</string>
+    <string name="diag_clear_title">Clear the log?</string>
+    <string name="diag_clear_body">What was recorded so far is lost; logging continues from here.</string>
+    <string name="diag_copied">Copied (%1$d KB) — paste it into the chat</string>
+    <string name="diag_copy_failed">The diagnostics could not be copied</string>
+    <string name="diag_subject">App diagnostics</string>
+    <string name="diag_back">Back</string>
+    <string name="diag_cancel">Cancel</string>
+</resources>

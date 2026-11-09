@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_title">Actualizaciones</string>
+    <string name="update_installed">Instalada: %1$s (%2$d)</string>
+    <string name="update_check_now">Buscar ahora</string>
+    <string name="update_install_now">Instalar %1$s ahora</string>
+    <string name="update_wifi_only">Descargar actualizaciones solo con wifi</string>
+    <string name="update_cancel">Cancelar</string>
+
+    <plurals name="update_state_idle">
+        <item quantity="one">Busca actualizaciones cada hora y al abrir la app.</item>
+        <item quantity="many">Busca actualizaciones cada %1$d horas y al abrir la app.</item>
+        <item quantity="other">Busca actualizaciones cada %1$d horas y al abrir la app.</item>
+    </plurals>
+    <string name="update_state_checking">Buscando…</string>
+    <string name="update_state_up_to_date">Tienes la última versión de este canal.</string>
+    <string name="update_state_downloading">Descargando %1$s…</string>
+    <string name="update_state_ready">%1$s está lista: se instala cuando salgas de la app.</string>
+    <string name="update_state_declined">%1$s está descargada. Se canceló la instalación: pulsa «Instalar ahora» para terminarla.</string>
+    <string name="update_state_wifi">Esperando a una wifi para descargar la actualización.</string>
+    <string name="update_state_needs_token">Las actualizaciones necesitan un token de GitHub: añádelo abajo.</string>
+    <string name="update_state_failed">La última comprobación falló (%1$s). Volverá a intentarlo sola.</string>
+
+    <string name="update_channel_title">Canal de actualizaciones</string>
+    <string name="update_channel_beta">Beta (estable)</string>
+    <string name="update_channel_alpha">Alfa (pruebas)</string>
+    <string name="update_standing_empty">Todavía no se ha publicado nada en este canal.</string>
+    <string name="update_standing_coming">%1$s llega en la próxima comprobación.</string>
+    <string name="update_standing_current">Tienes la versión más reciente de este canal.</string>
+    <string name="update_standing_waiting">Este móvil va por delante de este canal (%1$s): se reincorpora en la próxima versión del canal. Android nunca instala una versión anterior encima de una más nueva.</string>
+    <string name="update_alpha_warn_title">¿Pasar al canal de pruebas?</string>
+    <string name="update_alpha_warn_body">Las versiones alfa llegan según se escriben y nadie más las ha probado todavía. Volver a beta no es inmediato: el móvil espera a que haya una beta más nueva que la alfa que tiene.</string>
+    <string name="update_alpha_warn_confirm">Pasar a alfa</string>
+
+    <string name="update_channel_name">Actualizaciones de la app</string>
+    <string name="update_found_title">Actualización %1$s encontrada</string>
+    <string name="update_found_text">Se descarga e instala sola.</string>
+    <string name="update_ready_title">Actualización lista para instalar</string>
+    <string name="update_ready_text">Pulsa para confirmar la instalación.</string>
+    <string name="update_permission_title">No se pueden instalar actualizaciones</string>
+    <string name="update_permission_text">Permite que esta app instale aplicaciones desconocidas para que pueda actualizarse sola.</string>
+    <string name="update_permission_fix">Permitir instalaciones</string>
+    <string name="update_token_title">El token de GitHub ha dejado de funcionar</string>
+    <string name="update_token_text">El token no puede leer el repositorio (caducado o sin acceso): las actualizaciones están en pausa hasta que lo sustituyas.</string>
+    <string name="update_install_failed_title">No se ha podido instalar la actualización</string>
+    <string name="update_install_storage">No hay espacio suficiente. Libera algo y lo volverá a intentar.</string>
+    <string name="update_install_conflict">Esta actualización está firmada con otra clave distinta de la app instalada. Haz una copia de tus datos, desinstala la app e instala el APK nuevo a mano.</string>
+    <string name="update_install_other">Android rechazó la instalación (%1$s). Lo volverá a intentar más tarde.</string>
+</resources>

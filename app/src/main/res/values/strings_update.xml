@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="update_title">Updates</string>
+    <string name="update_installed">Installed: %1$s (%2$d)</string>
+    <string name="update_check_now">Check now</string>
+    <string name="update_install_now">Install %1$s now</string>
+    <string name="update_wifi_only">Download updates on Wi-Fi only</string>
+    <string name="update_cancel">Cancel</string>
+
+    <plurals name="update_state_idle">
+        <item quantity="one">Checks for updates every hour and when you open the app.</item>
+        <item quantity="other">Checks for updates every %1$d hours and when you open the app.</item>
+    </plurals>
+    <string name="update_state_checking">Checking…</string>
+    <string name="update_state_up_to_date">You have the latest version of this channel.</string>
+    <string name="update_state_downloading">Downloading %1$s…</string>
+    <string name="update_state_ready">%1$s is ready: it installs when you leave the app.</string>
+    <string name="update_state_declined">%1$s is downloaded. The installation was cancelled: tap “Install now” to finish it.</string>
+    <string name="update_state_wifi">Waiting for Wi-Fi to download the update.</string>
+    <string name="update_state_needs_token">Updates need a GitHub token: add it below.</string>
+    <string name="update_state_failed">The last check failed (%1$s). It will try again by itself.</string>
+
+    <string name="update_channel_title">Update channel</string>
+    <string name="update_channel_beta">Beta (stable)</string>
+    <string name="update_channel_alpha">Alpha (testing)</string>
+    <string name="update_standing_empty">Nothing has been published on this channel yet.</string>
+    <string name="update_standing_coming">%1$s arrives at the next check.</string>
+    <string name="update_standing_current">You are on the newest build of this channel.</string>
+    <string name="update_standing_waiting">This phone is ahead of this channel (%1$s): it rejoins it at the channel’s next release. Android never installs an older version over a newer one.</string>
+    <string name="update_alpha_warn_title">Switch to the testing channel?</string>
+    <string name="update_alpha_warn_body">Alpha builds arrive as they are written and nobody else has run them yet. Coming back to beta is not immediate: the phone waits until a beta is newer than the alpha it has.</string>
+    <string name="update_alpha_warn_confirm">Switch to alpha</string>
+
+    <string name="update_channel_name">App updates</string>
+    <string name="update_found_title">Update %1$s found</string>
+    <string name="update_found_text">It downloads and installs by itself.</string>
+    <string name="update_ready_title">Update ready to install</string>
+    <string name="update_ready_text">Tap to confirm the installation.</string>
+    <string name="update_permission_title">Updates can’t be installed</string>
+    <string name="update_permission_text">Allow this app to install unknown apps so it can update itself.</string>
+    <string name="update_permission_fix">Allow installs</string>
+    <string name="update_token_title">The GitHub token stopped working</string>
+    <string name="update_token_text">The token can’t read the repository (expired or without access): updates are paused until you replace it.</string>
+    <string name="update_install_failed_title">The update could not be installed</string>
+    <string name="update_install_storage">There is not enough free space. Free some up and it will try again.</string>
+    <string name="update_install_conflict">This update is signed by a different key than the installed app. Back up your data, uninstall the app and install the new APK by hand.</string>
+    <string name="update_install_other">Android refused the installation (%1$s). It will try again later.</string>
+</resources>

@@ -1,0 +1,213 @@
+name: Release
+
+# vX.Y.Z-alpha → alpha channel (GitHub PRE-release: testing).
+# vX.Y.Z-beta  → beta channel (normal release: production; releases/latest/download/$APP.apk is always the newest beta).
+# Builds, signs, publishes, verifies the uploaded asset, and only THEN commits channels/<channel>.json to main —
+# the file every installed app reads. From the oleskills `android-update-channels` skill (znhr's least-privilege
+# jobs and cert check, rwilco's upload robustness and forward-only channel commit).
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+# Per tag, never global: a global group keeps one running + one pending run and a newer pending run CANCELS the older
+# pending one, so three tags pushed close together silently skip the middle release. Parallel releases are made safe by
+# the forward-only channel step instead.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  APP: jdcm # The asset is $APP.apk: stage-less and permanent (install links, QRs and phones depend on it).
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    outputs:
+      channel: ${{ steps.meta.outputs.channel }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      vc: ${{ steps.meta.outputs.vc }}
+      vn: ${{ steps.meta.outputs.vn }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - name: Guards (channel suffix, tag == v<versionName>, tag on main)
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="$GITHUB_REF_NAME"
+          case "$TAG" in
+            *-alpha) CHANNEL=alpha; PRERELEASE=true ;;
+            *-beta)  CHANNEL=beta;  PRERELEASE=false ;;
+            *) echo "::error::tag '$TAG' must end in -alpha or -beta"; exit 1 ;;
+          esac
+          # Anchored and head -1: a comment that spells the pattern must never be picked up (rwilco v0.1.0/v0.2.0).
+          VC=$(grep -oP '^\s*versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts | head -1)
+          VN=$(grep -oP '^\s*versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
+          [ -n "$VC" ] && [ -n "$VN" ] || { echo "::error::cannot read versionCode/versionName from app/build.gradle.kts"; exit 1; }
+          # A suffix that disagrees with the tag would make every phone on the channel download and discard the build forever.
+          [ "$TAG" = "v$VN" ] || { echo "::error::tag $TAG != v$VN (app/build.gradle.kts)"; exit 1; }
+          git fetch -q origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "::error::tag $TAG is not on main"; exit 1; }
+          { echo "channel=$CHANNEL"; echo "prerelease=$PRERELEASE"; echo "vc=$VC"; echo "vn=$VN"; echo "tag=$TAG"; } >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - run: chmod +x gradlew scripts/gradle_retry.sh
+      - name: Tests (no secrets in this job)
+        run: scripts/gradle_retry.sh test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      # No Gradle cache here: whatever another job wrote into it would run inside the signing step (znhr).
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: chmod +x gradlew scripts/gradle_retry.sh
+      - name: Build, sign and verify (the only step that sees the key)
+        env:
+          KEYSTORE_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          CERT_SHA256: ${{ secrets.RELEASE_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          test -n "$KEYSTORE_B64" || { echo "::error::secret RELEASE_KEYSTORE_B64 is not set"; exit 1; }
+          export RELEASE_STORE_FILE="$RUNNER_TEMP/release.jks"
+          trap 'rm -f "$RELEASE_STORE_FILE"' EXIT
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RELEASE_STORE_FILE"
+          scripts/gradle_retry.sh :app:assembleRelease
+          APK=app/build/outputs/apk/release/app-release.apk
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          CERT=$("$APKSIGNER" verify --print-certs "$APK" | grep -oP 'SHA-256 digest: \K[0-9a-f]+' | head -1)
+          # Phones accept only this key: a release signed by any other must never be published.
+          [ "$CERT" = "$CERT_SHA256" ] || { echo "::error::unexpected signing certificate $CERT"; exit 1; }
+          mkdir -p out
+          cp "$APK" "out/$APP.apk"
+          if [ -f app/build/outputs/mapping/release/mapping.txt ]; then cp app/build/outputs/mapping/release/mapping.txt out/; fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release
+          path: out/
+          retention-days: 3
+
+  publish:
+    needs: [test, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      CHANNEL: ${{ needs.test.outputs.channel }}
+      PRERELEASE: ${{ needs.test.outputs.prerelease }}
+      VC: ${{ needs.test.outputs.vc }}
+      VN: ${{ needs.test.outputs.vn }}
+      TAG: ${{ needs.test.outputs.tag }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release
+          path: out/
+
+      - name: Create the release (re-runnable)
+        run: |
+          set -euo pipefail
+          BODY="$VN"
+          NF="release-notes/$VN.json"
+          if [ -f "$NF" ] && jq -e 'type == "object"' "$NF" >/dev/null 2>&1; then BODY=$(jq -r '.en // .es // ""' "$NF"); fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists; reusing it"
+          elif [ "$PRERELEASE" = "true" ]; then
+            gh release create "$TAG" --verify-tag --prerelease --title "$VN" --notes "$BODY"
+          else
+            # Never a pre-release: releases/latest (the install link) must point at the newest beta.
+            gh release create "$TAG" --verify-tag --title "$VN" --notes "$BODY"
+          fi
+
+      # GitHub sometimes fails half way ("Error saving asset") and leaves an asset whose state is not "uploaded"; its name
+      # then blocks every retry. Sweep those, upload over the rest, three tries (rwilco 96e0d49).
+      - name: Upload the assets
+        run: |
+          set -euo pipefail
+          FILES=("out/$APP.apk")
+          if [ -f out/mapping.txt ]; then FILES+=("out/mapping.txt"); fi
+          for attempt in 1 2 3; do
+            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" \
+              --jq '.assets[] | select(.state != "uploaded") | "\(.id) \(.name) \(.state)"' |
+              while read -r id name state; do
+                echo "clearing $name, which stopped at '$state'"
+                gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/assets/$id"
+              done
+            if gh release upload "$TAG" "${FILES[@]}" --clobber; then exit 0; fi
+            echo "upload $attempt did not finish; trying again"
+            sleep $((attempt * 10))
+          done
+          echo "::error::could not upload the release assets"; exit 1
+
+      # Read back what a phone will fetch, and build the manifest from what is really up there.
+      - name: Verify the asset and build the channel manifest
+        run: |
+          set -euo pipefail
+          ASSET=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" --jq ".assets[] | select(.name == \"$APP.apk\")")
+          STATE=$(jq -r .state <<<"$ASSET"); SIZE=$(jq -r .size <<<"$ASSET"); ID=$(jq -r .id <<<"$ASSET")
+          LOCAL=$(stat -c%s "out/$APP.apk")
+          [ "$STATE" = "uploaded" ] || { echo "::error::$APP.apk is '$STATE'"; exit 1; }
+          [ "$SIZE" = "$LOCAL" ] || { echo "::error::$APP.apk is $SIZE bytes up there and $LOCAL here"; exit 1; }
+          URL="https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/$APP.apk"
+          if [ "$(gh api "repos/$GITHUB_REPOSITORY" --jq .private)" = "false" ]; then
+            curl -fsSL -r 0-0 -o /dev/null "$URL" # the public URL resolves (one byte)
+          fi
+          SHA=$(sha256sum "out/$APP.apk" | cut -d' ' -f1)
+          NOTES='{}'
+          NF="release-notes/$VN.json"
+          # Release notes never block a release: optional, and a broken file only costs the notes.
+          if [ -f "$NF" ] && jq -e 'type == "object"' "$NF" >/dev/null 2>&1; then NOTES=$(jq -c . "$NF")
+          else echo "::warning::no readable $NF; publishing without notes"; fi
+          jq -n --argjson vc "$VC" --arg vn "$VN" --arg tag "$TAG" --arg apk "$URL" \
+                --argjson id "$ID" --argjson size "$LOCAL" --arg sha "$SHA" --argjson notes "$NOTES" \
+                '{versionCode:$vc, versionName:$vn, tag:$tag, apk:$apk, assetId:$id, size:$size, sha256:$sha, notes:$notes}' \
+                > "$RUNNER_TEMP/channel.json"
+          cat "$RUNNER_TEMP/channel.json"
+
+      # Releases cut minutes apart run side by side. Each attempt starts from main as it is now, and a channel only ever
+      # moves forward (rwilco 6695864: a rebase-and-push got stuck and left the channel on the older release). Same
+      # versionCode with different content (a re-run re-uploaded the asset: new id) is rewritten, not skipped.
+      - name: Point the channel at it
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          FILE="channels/$CHANNEL.json"
+          for attempt in 1 2 3 4 5; do
+            git fetch -q origin main
+            git reset -q --hard origin/main
+            mkdir -p channels
+            CURRENT=$(jq -r '.versionCode // 0' "$FILE" 2>/dev/null || echo 0)
+            if [ "$CURRENT" -gt "$VC" ]; then echo "channel is ahead ($CURRENT > $VC); leaving it"; exit 0; fi
+            if [ -f "$FILE" ] && cmp -s <(jq -S . "$FILE") <(jq -S . "$RUNNER_TEMP/channel.json"); then
+              echo "channel already points here"; exit 0
+            fi
+            cp "$RUNNER_TEMP/channel.json" "$FILE"
+            git add "$FILE"
+            git commit -q -m "chore: point the $CHANNEL channel at $VN [skip ci]"
+            if git push -q origin HEAD:main; then exit 0; fi
+            echo "push $attempt was beaten to it; trying again"
+            sleep $((attempt * 5))
+          done
+          echo "::error::could not point the channel at this release"; exit 1

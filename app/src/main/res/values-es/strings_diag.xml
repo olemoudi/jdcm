@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="diag_title">Diagnóstico</string>
+    <string name="diag_row_hint">Lo que ha estado haciendo la app, para copiarlo y enviarlo cuando algo falla.</string>
+    <string name="diag_hint">La app guarda un registro reciente de lo que hace y por qué. Si algo va mal, cópialo y pégalo en el chat o en la incidencia.</string>
+    <string name="diag_privacy">No incluye nombres de tus hijos, colegios ni campos: solo números internos. El registro ocupa como mucho unos 0,5 MB y se recicla solo.</string>
+    <string name="diag_copy">Copiar</string>
+    <string name="diag_copy_quick">Copiar el diagnóstico</string>
+    <string name="diag_share">Compartir…</string>
+    <string name="diag_clear">Borrar registro</string>
+    <string name="diag_clear_title">¿Borrar el registro?</string>
+    <string name="diag_clear_body">Se pierde lo registrado hasta ahora; el registro sigue desde aquí.</string>
+    <string name="diag_copied">Copiado (%1$d KB): pégalo en el chat</string>
+    <string name="diag_copy_failed">No se ha podido copiar el diagnóstico</string>
+    <string name="diag_subject">Diagnóstico de la app</string>
+    <string name="diag_back">Atrás</string>
+    <string name="diag_cancel">Cancelar</string>
+</resources>

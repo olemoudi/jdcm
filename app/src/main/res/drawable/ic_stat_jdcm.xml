@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status-bar icon: the launcher's calendar and ball as a white silhouette. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="24" android:viewportHeight="24">
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+        android:pathData="M6,4 H18 A2,2 0 0 1 20,6 V19 A2,2 0 0 1 18,21 H6 A2,2 0 0 1 4,19 V6 A2,2 0 0 1 6,4 Z M6,9 V19 H18 V9 Z" />
+    <path android:fillColor="#FFFFFFFF"
+        android:pathData="M7,2 H9 V6 H7 Z M15,2 H17 V6 H15 Z M8.5,14 A3.5,3.5 0 1 0 15.5,14 A3.5,3.5 0 1 0 8.5,14 Z" />
+</vector>

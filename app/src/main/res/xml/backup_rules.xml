@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The children and settings are backed up; the cached calendars and the diagnostic log are not (refetched / local only). -->
+<full-backup-content>
+    <include domain="file" path="kids.json" />
+    <include domain="sharedpref" path="settings.xml" />
+    <include domain="sharedpref" path="updates.xml" />
+</full-backup-content>

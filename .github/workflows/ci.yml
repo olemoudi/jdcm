@@ -1,0 +1,31 @@
+name: CI
+
+# Tests on every push and PR. The channel commits CI makes (channels/**) and release notes do not need a run.
+# Never tag a commit a bot made (channel pointer, coverage badge): its [skip ci] would suppress the tag's Release run too.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['channels/**', 'release-notes/**', 'docs/**', '**/*.md']
+  pull_request:
+    paths-ignore: ['channels/**', 'release-notes/**', 'docs/**', '**/*.md']
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - run: chmod +x gradlew scripts/gradle_retry.sh
+      - run: scripts/gradle_retry.sh test :app:assembleDebug
