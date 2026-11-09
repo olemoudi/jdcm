@@ -20,10 +20,15 @@ It reads the competition's public website
 
 ## Install
 
-Download [jdcm.apk](https://github.com/olemoudi/jdcm/releases/latest/download/jdcm.apk) on the phone
-and open it (Android 10+; allow installing from the browser when asked). The app updates itself from
-then on (Settings → Actualizaciones). Two channels: **beta** (stable, the link above) and **alpha**
-(testing, every build).
+On the phone, open **https://github.com/olemoudi/jdcm/releases/latest/download/jdcm.apk** (or scan
+the QR below), let the browser install it when Android asks (Android 10+), and open JDCM: a short
+guide asks for alerts and for permission to install its own updates. From then on it updates
+itself, silently.
+
+<img src="docs/install-qr.png" width="220" alt="QR code of the install link">
+
+Two channels: **beta** (stable; the link above, the default) and **alpha** (testing, every build;
+Ajustes → Actualizaciones).
 
 ## Privacy
 
