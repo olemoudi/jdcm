@@ -1,13 +1,13 @@
 {
-  "versionCode": 2,
-  "versionName": "0.2.0-alpha",
-  "tag": "v0.2.0-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.0-alpha/jdcm.apk",
-  "assetId": 728832311,
-  "size": 4458473,
-  "sha256": "cf3684b9898ea9cf54194330d6cf04b8f7afad604eb740b5217d5f562530c5cc",
+  "versionCode": 3,
+  "versionName": "0.2.1-alpha",
+  "tag": "v0.2.1-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.1-alpha/jdcm.apk",
+  "assetId": 728937192,
+  "size": 4475265,
+  "sha256": "05f44de8d08f9f3a529bdadce69425d8e32d22ef908723c94faa72b6fa8a2cfe",
   "notes": {
-    "es": "• Un asistente y un aviso en Partidos te ayudan a activar avisos y actualizaciones automáticas.\n• Más resistente a fallos de la web: no pierde datos ni manda avisos en ráfaga.\n• Nuevo icono, «Último resultado» de cada hijo, y la tira marca «Hoy» y «Finde».",
-    "en": "• A guide and a reminder on Matches help you turn on alerts and automatic updates.\n• Sturdier when the website fails: no lost data, no bursts of alerts.\n• New icon, each child's “Last result”, and the strip marks “Today” and “Wknd”."
+    "es": "• Junto al equipo de tu hijo aparece su nombre, en su color, en cada partido.\n• Bajo las fechas se explica qué significan los puntos de colores.",
+    "en": "• Your child's name, in their colour, now appears next to their team in every match.\n• A line under the dates explains what the coloured dots mean."
   }
 }
