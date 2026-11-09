@@ -77,6 +77,11 @@ class Settings(context: Context) {
         get() = d.getBoolean("onboardingDone", false)
         set(v) = d.edit { putBoolean("onboardingDone", v) }
 
+    /** How many app openings have shown the strip's legend (it explains the dots three times, then goes). */
+    var stripLegendShows: Int
+        get() = d.getInt("stripLegendShows", 0)
+        set(v) = d.edit { putInt("stripLegendShows", v) }
+
     /** Home's install-permission reminder stays hidden until this time ("Más tarde"). */
     var installBannerSnoozedUntil: Long
         get() = d.getLong("installBannerSnoozedUntil", 0)

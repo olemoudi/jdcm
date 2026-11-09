@@ -2,6 +2,7 @@ package dev.jdcm.ui.home
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -172,6 +174,7 @@ fun HomeScreen(
                                 onToday = { pickedDay = null },
                                 onCalendar = { showPicker = true },
                             )
+                            StripLegend(c, visible)
                             Hairline()
                         }
                     }
@@ -261,6 +264,7 @@ private fun LazyListScope.kidSection(
                         onClick = { actions.openMatch(MatchArgs(mine, ref, kid.teamId, accent, kid.name)) },
                         highlightTeamId = kid.teamId,
                         accent = accent,
+                        highlightLabel = kid.name,
                         onDirections = actions.directions,
                     )
                 } else {
@@ -360,6 +364,37 @@ private fun LastResultRow(kid: Kid, m: dev.jdcm.core.model.Match, onClick: () ->
     }
 }
 
+/**
+ * What the dots under the dates mean, said the first three times the app is opened: a dot was
+ * not self-explanatory (the owner asked). One dot per child, in their colour.
+ */
+@Composable
+private fun StripLegend(c: AppContainer, kids: List<Kid>) {
+    val show = remember { c.settings.stripLegendShows < 3 }
+    LaunchedEffect(show) {
+        if (show && !c.stripLegendCounted) {
+            c.stripLegendCounted = true
+            c.settings.stripLegendShows = c.settings.stripLegendShows + 1
+        }
+    }
+    if (!show || kids.isEmpty()) return
+    Row(
+        Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        kids.forEach { k ->
+            Box(Modifier.size(8.dp).clip(androidx.compose.foundation.shape.CircleShape).background(kidColor(k.color)))
+            Text(k.name, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+        }
+        Text(
+            stringResource(if (kids.size == 1) R.string.strip_legend_one else R.string.strip_legend_many),
+            style = MaterialTheme.typography.bodySmall,
+            color = JdcmColors.extra.muted,
+        )
+    }
+}
+
 /** Marca's links under a competition: "Resultados · Clasificación · Trofeos". */
 @Composable
 fun FooterLinks(links: List<Pair<String, () -> Unit>>) {
@@ -374,5 +409,5 @@ fun FooterLinks(links: List<Pair<String, () -> Unit>>) {
 
 fun groupRoute(kid: Kid, tab: Int) = GroupRoute(
     kid.groupId, kid.sportId, kid.competitionId, kid.categoryId,
-    title = kid.groupName, tab = tab, teamId = kid.teamId, kidColor = kid.color,
+    title = kid.groupName, tab = tab, teamId = kid.teamId, kidColor = kid.color, kidName = kid.name,
 )

@@ -24,6 +24,7 @@ data class GroupRoute(
     /** The followed team to highlight, if any. */
     val teamId: Int = 0,
     val kidColor: Int = -1,
+    val kidName: String = "",
 )
 
 @Serializable

@@ -206,4 +206,6 @@
     <string name="res_loss">Perdió %1$d-%2$d</string>
     <string name="vs_team">contra %1$s</string>
     <string name="not_loaded">Aún no hay datos de este grupo.</string>
+    <string name="strip_legend_one">= juega ese fin de semana</string>
+    <string name="strip_legend_many">= juegan ese fin de semana</string>
 </resources>

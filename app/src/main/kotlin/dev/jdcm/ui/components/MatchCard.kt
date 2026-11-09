@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Directions
 import androidx.compose.material.icons.outlined.Place
@@ -62,6 +63,8 @@ fun MatchCard(
     modifier: Modifier = Modifier,
     highlightTeamId: Int = 0,
     accent: Color? = null,
+    /** The child's name, shown as a tag in their colour next to their team (a bare dot said nothing). */
+    highlightLabel: String? = null,
     compact: Boolean = false,
     showDate: Boolean = true,
     onDirections: ((Match) -> Unit)? = null,
@@ -70,7 +73,7 @@ fun MatchCard(
     val fmt = remember(ctx) { Format(ctx) }
     val extra = JdcmColors.extra
     if (match.isBye) {
-        ByeRow(match.restingTeam, highlightTeamId, accent, modifier)
+        ByeRow(match.restingTeam, highlightTeamId, accent, highlightLabel, modifier)
         return
     }
     val result = match.hasResult
@@ -98,8 +101,8 @@ fun MatchCard(
             Spacer(Modifier.height(if (compact) 4.dp else 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 8.dp)) {
-                    TeamLine(match.home, match, highlightTeamId, accent, compact)
-                    TeamLine(match.away, match, highlightTeamId, accent, compact)
+                    TeamLine(match.home, match, highlightTeamId, accent, highlightLabel, compact)
+                    TeamLine(match.away, match, highlightTeamId, accent, highlightLabel, compact)
                 }
                 Spacer(Modifier.width(8.dp))
                 RightColumn(match, fmt, compact)
@@ -165,7 +168,7 @@ private fun Label(text: String, color: Color) {
 }
 
 @Composable
-private fun TeamLine(team: Team?, match: Match, highlightTeamId: Int, accent: Color?, compact: Boolean) {
+private fun TeamLine(team: Team?, match: Match, highlightTeamId: Int, accent: Color?, label: String?, compact: Boolean) {
     val winner = match.hasResult && team != null && dev.jdcm.core.standings.Standings.outcome(match, team.id) == dev.jdcm.core.standings.Outcome.WIN
     val mine = team != null && team.id == highlightTeamId
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -180,9 +183,9 @@ private fun TeamLine(team: Team?, match: Match, highlightTeamId: Int, accent: Co
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f, fill = false),
         )
-        if (mine && accent != null) {
-            Spacer(Modifier.width(6.dp))
-            Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+        if (mine && accent != null && !label.isNullOrBlank()) {
+            Spacer(Modifier.width(8.dp))
+            KidTag(label, accent)
         }
     }
 }
@@ -226,7 +229,7 @@ private fun Score(value: Int, bold: Boolean, compact: Boolean) {
 }
 
 @Composable
-private fun ByeRow(team: Team?, highlightTeamId: Int, accent: Color?, modifier: Modifier) {
+private fun ByeRow(team: Team?, highlightTeamId: Int, accent: Color?, label: String?, modifier: Modifier) {
     val mine = team != null && team.id == highlightTeamId
     Row(
         modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
@@ -242,10 +245,27 @@ private fun ByeRow(team: Team?, highlightTeamId: Int, accent: Color?, modifier: 
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        if (mine && accent != null) {
-            Box(Modifier.size(8.dp).clip(CircleShape).background(accent))
+        if (mine && accent != null && !label.isNullOrBlank()) {
+            KidTag(label, accent)
             Spacer(Modifier.width(8.dp))
         }
         Text(stringResource(R.string.rests), style = MaterialTheme.typography.labelLarge, color = JdcmColors.extra.muted)
     }
+}
+
+/**
+ * The child's name on their team: their colour as the background, dark text on it (the palette
+ * is light enough for that to read in both themes).
+ */
+@Composable
+fun KidTag(name: String, color: Color, modifier: Modifier = Modifier) {
+    Text(
+        name,
+        modifier.clip(RoundedCornerShape(50)).background(color).padding(horizontal = 8.dp, vertical = 2.dp),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = Color(0xFF111214),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }

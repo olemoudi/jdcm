@@ -137,7 +137,7 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
                 if (snap == null || snap.rounds.isEmpty()) {
                     LazyColumn(Modifier.fillMaxSize()) { item { dev.jdcm.ui.components.NotLoadedYet(status[route.groupId], onRetry = { c.repository.syncInBackground(ref, SyncMode.FORCE, "retry") }) } }
                 } else when (tab) {
-                    0 -> RoundsTab(snap, ref, route.teamId, accent, status[route.groupId])
+                    0 -> RoundsTab(snap, ref, route.teamId, accent, route.kidName, status[route.groupId])
                     1 -> LazyColumn(Modifier.fillMaxSize()) {
                         item {
                             Spacer(Modifier.height(8.dp))
@@ -179,7 +179,7 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
 
 /** The web's jornada navigation, as a strip: J1 … J9 with dates, arrows, and the round's matches. */
 @Composable
-private fun RoundsTab(snap: GroupSnapshot, ref: GroupRef, teamId: Int, accent: Color?, status: dev.jdcm.data.SyncStatus?) {
+private fun RoundsTab(snap: GroupSnapshot, ref: GroupRef, teamId: Int, accent: Color?, kidName: String, status: dev.jdcm.data.SyncStatus?) {
     val ctx = LocalContext.current
     val fmt = remember(ctx) { Format(ctx) }
     val actions = LocalActions.current
@@ -237,6 +237,7 @@ private fun RoundsTab(snap: GroupSnapshot, ref: GroupRef, teamId: Int, accent: C
                             onClick = { actions.openMatch(MatchArgs(m, ref, teamId, accent, snap.group.name)) },
                             highlightTeamId = teamId,
                             accent = accent,
+                            highlightLabel = kidName.ifBlank { null },
                             onDirections = actions.directions,
                         )
                     }

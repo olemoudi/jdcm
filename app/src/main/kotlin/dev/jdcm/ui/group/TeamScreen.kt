@@ -140,7 +140,7 @@ fun TeamScreen(c: AppContainer, route: TeamRoute, onBack: () -> Unit, onGroup: (
                 item {
                     Text(stringResource(R.string.next_match), style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
                     FlatCard(borderColor = accent ?: MaterialTheme.colorScheme.primary) {
-                        MatchCard(next, onClick = { actions.openMatch(MatchArgs(next, ref, team.id, accent, snap.group.name)) }, highlightTeamId = team.id, accent = accent, onDirections = actions.directions)
+                        MatchCard(next, onClick = { actions.openMatch(MatchArgs(next, ref, team.id, accent, snap.group.name)) }, highlightTeamId = team.id, accent = accent, highlightLabel = kid?.name, onDirections = actions.directions)
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -155,14 +155,14 @@ fun TeamScreen(c: AppContainer, route: TeamRoute, onBack: () -> Unit, onGroup: (
                                 stringResource(R.string.round_short, m.roundNumber), modifier = Modifier.width(44.dp).padding(start = 12.dp),
                                 style = MaterialTheme.typography.labelMedium, color = JdcmColors.extra.muted, fontWeight = FontWeight.Bold,
                             )
-                            MatchCard(m, onClick = { actions.openMatch(MatchArgs(m, ref, team.id, accent, snap.group.name)) }, modifier = Modifier.weight(1f), highlightTeamId = team.id, accent = accent, compact = true)
+                            MatchCard(m, onClick = { actions.openMatch(MatchArgs(m, ref, team.id, accent, snap.group.name)) }, modifier = Modifier.weight(1f), highlightTeamId = team.id, accent = accent, highlightLabel = kid?.name, compact = true)
                         }
                     }
                 }
                 DoorRow(
                     title = stringResource(R.string.group_standings),
                     icon = Icons.Outlined.FormatListNumbered,
-                    onClick = { onGroup(GroupRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, snap.group.name, tab = 1, teamId = team.id, kidColor = kid?.color ?: -1)) },
+                    onClick = { onGroup(GroupRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, snap.group.name, tab = 1, teamId = team.id, kidColor = kid?.color ?: -1, kidName = kid?.name.orEmpty())) },
                 )
                 FreshnessLine(status[route.groupId], snap.newestFetch)
                 Spacer(Modifier.height(24.dp))
