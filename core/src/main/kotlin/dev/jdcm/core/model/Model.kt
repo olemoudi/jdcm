@@ -188,6 +188,11 @@ data class RoundPage(
     val next: Round?,
     val rounds: List<Round>,
     val matches: List<Match>,
+    /**
+     * The previous and next rounds come with their matches in the same answer: one request
+     * refreshes three rounds. Only rounds the site sent matches for (never its "Jornada 0" placeholder).
+     */
+    val neighbours: List<Pair<Round, List<Match>>> = emptyList(),
 )
 
 /** All groups of a category (or every category of a sport) for one round number. */

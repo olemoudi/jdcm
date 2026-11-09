@@ -94,7 +94,7 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
     var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(route.groupId) {
         c.repository.load(route.groupId)
-        c.repository.sync(ref, SyncMode.IF_STALE, "group screen")
+        c.repository.syncInBackground(ref, SyncMode.IF_STALE, "group screen")
     }
     val accent = route.kidColor.takeIf { it >= 0 }?.let(::kidColor)
     val kind = SportKind.of(route.sportId, snap?.group?.sport)
@@ -131,11 +131,11 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
             }
             PullToRefreshBox(
                 isRefreshing = refreshing,
-                onRefresh = { scope.launch { refreshing = true; try { c.repository.sync(ref, SyncMode.FORCE, "pull") } finally { refreshing = false } } },
+                onRefresh = { scope.launch { refreshing = true; try { c.repository.syncInBackground(ref, SyncMode.FORCE, "pull").join() } finally { refreshing = false } } },
                 modifier = Modifier.fillMaxSize(),
             ) {
                 if (snap == null || snap.rounds.isEmpty()) {
-                    LazyColumn(Modifier.fillMaxSize()) { item { FreshnessLine(status[route.groupId] ?: dev.jdcm.data.SyncStatus(running = true), 0) } }
+                    LazyColumn(Modifier.fillMaxSize()) { item { dev.jdcm.ui.components.NotLoadedYet(status[route.groupId], onRetry = { c.repository.syncInBackground(ref, SyncMode.FORCE, "retry") }) } }
                 } else when (tab) {
                     0 -> RoundsTab(snap, ref, route.teamId, accent, status[route.groupId])
                     1 -> LazyColumn(Modifier.fillMaxSize()) {

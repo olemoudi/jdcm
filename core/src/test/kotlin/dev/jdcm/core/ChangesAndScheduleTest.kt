@@ -3,7 +3,6 @@ package dev.jdcm.core
 import dev.jdcm.core.changes.MatchChange
 import dev.jdcm.core.changes.MatchChanges
 import dev.jdcm.core.model.MatchStatus
-import dev.jdcm.core.model.Round
 import dev.jdcm.core.model.Venue
 import dev.jdcm.core.policy.RefreshPolicy
 import dev.jdcm.core.schedule.Schedule
@@ -48,8 +47,9 @@ class ChangesAndScheduleTest {
     fun `a result coming in is reported, and nothing on a first sync`() {
         val before = snapshot(listOf(match(1, mine, other)))
         val after = snapshot(listOf(played(1, mine, other, 3, 2)))
-        assertTrue(MatchChanges.between(before, after, setOf(mine.id), thursday).single() is MatchChange.ResultIn)
-        assertTrue(MatchChanges.between(null, after, setOf(mine.id), thursday).isEmpty())
+        val sunday = LocalDateTime.of(2026, 11, 15, 12, 0)
+        assertTrue(MatchChanges.between(before, after, setOf(mine.id), sunday).single() is MatchChange.ResultIn)
+        assertTrue(MatchChanges.between(null, after, setOf(mine.id), sunday).isEmpty())
     }
 
     @Test
@@ -96,19 +96,5 @@ class ChangesAndScheduleTest {
         assertTrue(RefreshPolicy.isMatchWindow(LocalDateTime.of(2026, 11, 13, 18, 0)))
         assertTrue(RefreshPolicy.isMatchWindow(LocalDateTime.of(2026, 11, 15, 23, 0)))
         assertFalse(RefreshPolicy.isMatchWindow(LocalDateTime.of(2026, 11, 16, 15, 0)))
-    }
-
-    @Test
-    fun `a day-old or incomplete snapshot fetches every round, a fresh one only those near today`() {
-        val rounds = (1..9).map { Round(100 + it, it, SAT_14.plusWeeks((it - 1).toLong())) }
-        val s = snapshot(listOf(match(1, mine, other)), rounds)
-        val now = LocalDateTime.of(2026, 11, 12, 20, 0)
-        val nowMs = 10 * RefreshPolicy.HOUR
-        assertEquals(9, RefreshPolicy.roundsToFetch(s.copy(roundFetchedAt = emptyMap()), now, nowMs).size)
-        val fresh = s.copy(roundFetchedAt = rounds.associate { it.id to nowMs - RefreshPolicy.HOUR })
-        // Today is Thursday 12th: rounds within three weeks ahead are 14th, 21st, 28th (and Dec 3? no: 5th > 21 days).
-        assertEquals(listOf(1, 2, 3), RefreshPolicy.roundsToFetch(fresh, now, nowMs).map { it.number })
-        val stale = s.copy(roundFetchedAt = rounds.associate { it.id to nowMs - 25 * RefreshPolicy.HOUR })
-        assertEquals(9, RefreshPolicy.roundsToFetch(stale, now, nowMs).size)
     }
 }

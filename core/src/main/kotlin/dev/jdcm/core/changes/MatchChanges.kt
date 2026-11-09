@@ -33,11 +33,15 @@ object MatchChanges {
         if (before == null || teamIds.isEmpty()) return emptyList()
         val old = before.matches.associateBy { it.id }
         val out = mutableListOf<MatchChange>()
-        for (m in after.matches) {
+        val today = now.toLocalDate()
+        for (m in after.matches.distinctBy { it.id }) {
             val teamId = teamIds.firstOrNull { m.involves(it) } ?: continue
             if (m.isBye) continue
             val o = old[m.id] ?: continue
             if (m.hasResult && !o.hasResult) {
+                // A "result" for a match not played yet is the site's data being odd (an early
+                // closed flag, a stray score), not news: never announce it.
+                if (m.day?.isAfter(today) != false) continue
                 out += MatchChange.ResultIn(m, teamId)
                 continue
             }
@@ -51,8 +55,11 @@ object MatchChanges {
                 continue
             }
             if (m.status == MatchStatus.UNSCHEDULED) continue
-            if (m.start != o.start || m.timeKnown != o.timeKnown) out += MatchChange.Rescheduled(m, teamId, o)
-            if (!sameVenue(m.venue, o.venue)) out += MatchChange.Relocated(m, teamId, o.venue)
+            // A date or venue that *disappears* is a gap in the answer, not a change worth a
+            // notification (it would fire for every match, and again when the data returns).
+            val moved = m.start != null && (m.start != o.start || m.timeKnown != o.timeKnown) && !(o.timeKnown && !m.timeKnown && m.day == o.day)
+            if (moved) out += MatchChange.Rescheduled(m, teamId, o)
+            if (m.venue != null && !sameVenue(m.venue, o.venue)) out += MatchChange.Relocated(m, teamId, o.venue)
         }
         return out
     }

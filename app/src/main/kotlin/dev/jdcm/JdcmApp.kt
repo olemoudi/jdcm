@@ -21,7 +21,6 @@ import dev.jdcm.data.Repository
 import dev.jdcm.data.Settings
 import dev.jdcm.data.SyncMode
 import dev.jdcm.diag.DiagLog
-import dev.jdcm.diag.ExitReasons
 import dev.jdcm.notify.Notifier
 import dev.jdcm.notify.Reminders
 import dev.jdcm.update.SharedPrefsUpdatePrefs
@@ -38,7 +37,7 @@ import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
 /** Manual DI: one of each, created once per process. */
-class AppContainer(app: Application) {
+class AppContainer(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default + CoroutineExceptionHandler { _, e -> DiagLog.e("App", "uncaught in scope", e) })
     val http: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
@@ -50,7 +49,7 @@ class AppContainer(app: Application) {
     val groups = GroupCache(app)
     val api = EcmApi(http)
     val notifier = Notifier(app, settings)
-    val repository = Repository(api, groups, kids, onChanges = { notifier.changes(it) })
+    val repository = Repository(scope, api, groups, kids, onChanges = { notifier.changes(it) }, onFetched = { Reminders.rearm(app) })
 }
 
 class JdcmApp : Application(), SingletonImageLoader.Factory {
@@ -61,7 +60,6 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
         super.onCreate()
         DiagLog.init(this) // everything after this is caught, crashes included
         DiagLog.i("App", "process start ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.GIT_SHA} api ${Build.VERSION.SDK_INT}")
-        ExitReasons.logNew(this, filesDir.resolve("exit-seen"))
         container = AppContainer(this)
         container.notifier.ensureChannels()
 
@@ -70,13 +68,18 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
         val defaultChannel = if (BuildConfig.VERSION_NAME.endsWith(UpdateChannel.ALPHA.suffix)) UpdateChannel.ALPHA else UpdateChannel.BETA
         Updates.init(this, SharedPrefsUpdatePrefs(this, defaultChannel), PublicRepoSource(container.http), container.http)
 
-        SyncWorker.schedule(this)
-        Reminders.rearm(this)
+        // Re-enqueued only when the build changed: a background start (the worker itself) costs no
+        // WorkManager write. Alarms are re-armed when the app is shown, on boot and after an update.
+        if (container.settings.scheduledForVersion != BuildConfig.VERSION_CODE) {
+            SyncWorker.schedule(this)
+            container.settings.scheduledForVersion = BuildConfig.VERSION_CODE
+        }
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
             override fun onStart(owner: LifecycleOwner) {
                 DiagLog.i("App", "shown")
                 // Opening the app: refresh the children's groups if stale (cached data shows meanwhile).
+                Reminders.rearm(this@JdcmApp)
                 container.scope.launch {
                     container.repository.syncKids(SyncMode.IF_STALE, "shown")
                     // Groups looked at once (explorer, team search) and untouched for a month go.

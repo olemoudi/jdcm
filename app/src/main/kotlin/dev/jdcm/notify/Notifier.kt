@@ -51,24 +51,65 @@ class Notifier(private val context: Context, private val settings: Settings) {
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) &&
             NotificationManagerCompat.from(context).areNotificationsEnabled()
 
+    /**
+     * At most [MAX_PER_KID] notifications per child and sync: more than that at once is the site
+     * reshuffling something (or answering oddly), and one summary says it without a flood.
+     */
     fun changes(list: List<Pair<Kid, MatchChange>>) {
         val s = settings.state.value
-        for ((kid, c) in list) {
-            val wanted = if (c is MatchChange.ResultIn) s.notifyResults else s.notifyChanges
-            if (!wanted) {
-                DiagLog.i(TAG, "suppressed ${c.javaClass.simpleName}@${c.match.id}: off in settings")
+        val wanted = list.filter { (_, c) ->
+            val on = if (c is MatchChange.ResultIn) s.notifyResults else s.notifyChanges
+            if (!on) DiagLog.i(TAG, "suppressed ${c.javaClass.simpleName}@${c.match.id}: off in settings")
+            on
+        }
+        for ((kid, items) in wanted.groupBy({ it.first.id }, { it }).values.map { it.first().first to it.map { p -> p.second } }) {
+            if (items.size > MAX_PER_KID) {
+                DiagLog.w(TAG, "${items.size} changes for #${kid.id.take(8)} at once: one summary instead")
+                summary(kid, items.map { it.match.id }.distinct().size)
                 continue
             }
-            val (title, text) = describe(kid, c)
-            post(
-                channel = if (c is MatchChange.ResultIn) CH_RESULTS else CH_CHANGES,
-                id = notificationId(c.match.id, if (c is MatchChange.ResultIn) 1 else 2),
-                title = title,
-                text = text,
-                kid = kid,
-                match = c.match,
-                kind = c.javaClass.simpleName,
-            )
+            for (c in items) {
+                val (title, text) = describe(kid, c)
+                post(
+                    channel = if (c is MatchChange.ResultIn) CH_RESULTS else CH_CHANGES,
+                    id = notificationId(c.match.id, kindOf(c)),
+                    title = title,
+                    text = text,
+                    kid = kid,
+                    match = c.match,
+                    kind = c.javaClass.simpleName,
+                )
+            }
+        }
+    }
+
+    private fun kindOf(c: MatchChange): Int = when (c) {
+        is MatchChange.ResultIn -> 1
+        is MatchChange.Rescheduled -> 2
+        is MatchChange.Relocated -> 4
+        is MatchChange.StatusChanged -> 5
+    }
+
+    private fun summary(kid: Kid, matches: Int) {
+        if (!canPost()) return
+        val open = PendingIntent.getActivity(
+            context, 9_000 + kid.id.hashCode().mod(900),
+            Intent(context, MainActivity::class.java).setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        val n = NotificationCompat.Builder(context, CH_CHANGES)
+            .setSmallIcon(R.drawable.ic_stat_jdcm)
+            .setContentTitle(context.getString(R.string.notif_many_title, kid.name))
+            .setContentText(context.getString(R.string.notif_many_text, matches))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setColor(KID_COLORS[kid.color.mod(KID_COLORS.size)])
+            .build()
+        try {
+            NotificationManagerCompat.from(context).notify(9_000 + kid.id.hashCode().mod(900), n)
+        } catch (e: SecurityException) {
+            DiagLog.w(TAG, "summary refused: ${e.javaClass.simpleName}")
         }
     }
 
@@ -133,6 +174,8 @@ class Notifier(private val context: Context, private val settings: Settings) {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setContentIntent(open)
             .setAutoCancel(true)
+            // A re-post of the same match (the data flapping) updates the card silently.
+            .setOnlyAlertOnce(true)
             .setColor(KID_COLORS[kid.color.mod(KID_COLORS.size)])
             .setCategory(if (channel == CH_REMINDERS) NotificationCompat.CATEGORY_REMINDER else NotificationCompat.CATEGORY_EVENT)
         val v = match.venue
@@ -152,13 +195,14 @@ class Notifier(private val context: Context, private val settings: Settings) {
         }
     }
 
-    private fun notificationId(matchId: Int, kind: Int) = 10_000 + (matchId % 200_000) * 4 + kind
+    private fun notificationId(matchId: Int, kind: Int) = 10_000 + (matchId % 200_000) * 8 + kind
 
     companion object {
         private const val TAG = "Notify"
         const val CH_CHANGES = "changes"
         const val CH_RESULTS = "results"
         const val CH_REMINDERS = "reminders"
+        const val MAX_PER_KID = 3
 
         /** Kid colours as ARGB, shared with the UI's palette. */
         val KID_COLORS = intArrayOf(

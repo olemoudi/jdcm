@@ -73,7 +73,7 @@ fun TeamScreen(c: AppContainer, route: TeamRoute, onBack: () -> Unit, onGroup: (
     LaunchedEffect(route.groupId) {
         c.kids.load()
         c.repository.load(route.groupId)
-        c.repository.sync(ref, SyncMode.IF_STALE, "team screen")
+        c.repository.syncInBackground(ref, SyncMode.IF_STALE, "team screen")
     }
     val team = snap?.team(route.teamId)
     val kid = kids.orEmpty().firstOrNull { it.teamId == route.teamId && it.groupId == route.groupId }
@@ -91,7 +91,7 @@ fun TeamScreen(c: AppContainer, route: TeamRoute, onBack: () -> Unit, onGroup: (
         containerColor = MaterialTheme.colorScheme.background,
     ) { pad ->
         if (snap == null || team == null) {
-            Column(Modifier.fillMaxSize().padding(pad)) { FreshnessLine(status[route.groupId] ?: dev.jdcm.data.SyncStatus(running = true), 0) }
+            Column(Modifier.fillMaxSize().padding(pad)) { dev.jdcm.ui.components.NotLoadedYet(status[route.groupId], onRetry = { c.repository.syncInBackground(ref, SyncMode.FORCE, "retry") }) }
             return@Scaffold
         }
         val rule = PointsRule.forSport(snap.sport)

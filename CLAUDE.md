@@ -41,6 +41,31 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   on match weekends, 2 h otherwise; background 50 min / 5 h, nothing at night; a full pass per group
   once a day). Never parallelise requests to the site.
 
+## Reliability rules (two reviews, 2026-11-09)
+
+- `GroupSnapshot.merge` is defensive: the group id is ours; other groups' matches dropped; a round
+  that shrinks below half is refused unless the same answer repeats; a missing date/venue keeps the
+  held one; a "result" dated in the future is stored as pending; the site's round list is ignored if
+  it lacks the round just fetched and never drops rounds holding results.
+- `Repository.sync` gates on the last *attempt* (`lastAttemptMs`; 10 min for a group never loaded);
+  rounds closest to today first, neighbours from the same answer (`previous`/`next` carry matches);
+  a site-wide failure (5xx, 429, timeout, offline) ends the sync, an odd answer about one round does
+  not; 3-minute budget; save/report/status in `NonCancellable`; reminder re-armed after any fetch.
+  Screens start syncs with `syncInBackground` (app scope), never in their own scope.
+- Notifications: ≤ 3 per child per sync (else one summary), `setOnlyAlertOnce`, ids per kind.
+- `JsonFile`: fsync + `.bak`; a corrupt file reads the backup (the children list can't vanish).
+- Device-only state (`device` prefs: guide done, worker scheduled, reminded, seen) is not backed up.
+- Known limitation: `EcmApi.SEASON_ID` is hard-coded (12 = 2026-27); the explorer and team search need
+  a release at the season rollover (July 2027). Followed groups keep working until then.
+
+## First run
+
+`ui/onboarding/`: welcome → notifications → install permission (drawn guide; without it no updates)
+→ battery (optional) → add the first child. Home's `InstallPermissionBanner` reminds while the
+install permission is missing ("Más tarde" = 3 days). Navigation after the guide waits for the
+NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm_icon.svg`
+(render with `rsvg-convert` to preview; the vectors in `res/drawable` share its geometry).
+
 ## Conventions
 
 - Strings: `res/values/strings.xml` (en) and `res/values-es/strings.xml` (es) hold the same keys and

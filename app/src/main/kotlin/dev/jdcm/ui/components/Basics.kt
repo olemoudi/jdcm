@@ -171,6 +171,29 @@ fun FreshnessLine(status: SyncStatus?, newestFetchMs: Long, modifier: Modifier =
     }
 }
 
+/**
+ * A group with nothing loaded yet: the progress while a sync runs, otherwise an honest "no data
+ * yet" (with why, when known) and a way to try again — never a spinner that nothing is behind.
+ */
+@Composable
+fun NotLoadedYet(status: SyncStatus?, onRetry: () -> Unit, modifier: Modifier = Modifier) {
+    if (status?.running == true) {
+        FreshnessLine(status, 0, modifier)
+        return
+    }
+    Row(modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        val why = when {
+            status?.offline == true -> stringResource(R.string.sync_offline)
+            status?.error != null -> stringResource(R.string.sync_failed)
+            else -> stringResource(R.string.not_loaded)
+        }
+        Text(why, style = MaterialTheme.typography.bodyMedium, color = JdcmColors.extra.muted, modifier = Modifier.weight(1f))
+        androidx.compose.material3.TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
+            Text(stringResource(R.string.retry))
+        }
+    }
+}
+
 /** A full-width row that leads somewhere: the app's doors are rows, never tiny icons (rwilco). */
 @Composable
 fun DoorRow(

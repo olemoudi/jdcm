@@ -101,7 +101,9 @@ fun TablesScreen(c: AppContainer, onSettings: () -> Unit, onAddKid: () -> Unit, 
                         )
                         FlatCard {
                             if (rows.isEmpty()) {
-                                FreshnessLine(status[kid.groupId] ?: dev.jdcm.data.SyncStatus(running = true), 0)
+                                dev.jdcm.ui.components.NotLoadedYet(status[kid.groupId], onRetry = {
+                                    c.repository.syncInBackground(kid.ref, dev.jdcm.data.SyncMode.FORCE, "retry")
+                                })
                             } else {
                                 StandingsTable(rows, rule, kid.teamId, kidColor(kid.color), onTeam = { teamId ->
                                     onTeam(TeamRoute(kid.groupId, kid.sportId, kid.competitionId, kid.categoryId, teamId))

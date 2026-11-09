@@ -67,6 +67,12 @@ object SiteParser {
         val matches = jornada?.get("Enfrentamientos").arr().mapNotNull { match(it.obj()) }
         val group = matches.firstNotNullOfOrNull { m -> groupOf(jornada?.get("Enfrentamientos").arr(), m.groupId) }
             ?: jornada?.int("IdGrupo")?.takeIf { it > 0 }?.let { Group(it, "") }
+        val neighbours = listOf("previous", "next").mapNotNull { k ->
+            val o = root[k].obj() ?: return@mapNotNull null
+            val r = round(o) ?: return@mapNotNull null
+            val list = o["Enfrentamientos"] as? JsonArray ?: return@mapNotNull null
+            r to list.mapNotNull { match(it.obj()) }
+        }
         return RoundPage(
             group = group,
             round = round(jornada),
@@ -74,6 +80,7 @@ object SiteParser {
             next = round(root["next"].obj()),
             rounds = rounds,
             matches = matches,
+            neighbours = neighbours,
         )
     }
 

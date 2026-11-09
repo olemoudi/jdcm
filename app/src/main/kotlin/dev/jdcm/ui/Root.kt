@@ -63,6 +63,7 @@ import dev.jdcm.ui.home.HomeScreen
 import dev.jdcm.ui.home.TablesScreen
 import dev.jdcm.ui.kid.KidEditorScreen
 import dev.jdcm.ui.match.MatchSheet
+import dev.jdcm.ui.onboarding.OnboardingScreen
 import dev.jdcm.ui.nav.ChangelogRoute
 import dev.jdcm.ui.nav.DiagnosticsRoute
 import dev.jdcm.ui.nav.ExploreCompetitionRoute
@@ -82,6 +83,7 @@ import dev.jdcm.ui.settings.WhatsNewSheet
 import dev.jdcm.ui.settings.appDiagSections
 import dev.jdcm.ui.theme.JdcmTheme
 import dev.jdcm.work.SyncWorker
+import kotlinx.coroutines.flow.first
 
 /** What any screen can ask of the shell: open a match's sheet, get directions to a field. */
 data class MatchArgs(val match: Match, val ref: GroupRef?, val highlightTeamId: Int = 0, val accent: Color? = null, val title: String = "")
@@ -93,6 +95,7 @@ class AppActions(
 )
 
 val LocalActions = staticCompositionLocalOf<AppActions> { error("no actions") }
+val LocalContainer = staticCompositionLocalOf<AppContainer> { error("no container") }
 
 fun openDirections(ctx: Context, m: Match) {
     val v = m.venue ?: return
@@ -142,7 +145,23 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
             pendingOpen.value = null
         }
 
-        CompositionLocalProvider(LocalActions provides actions) {
+        CompositionLocalProvider(LocalActions provides actions, LocalContainer provides c) {
+            var onboarding by remember { mutableStateOf(!c.settings.onboardingDone) }
+            // Navigation waits for the NavHost below to exist: navigating from the guide itself
+            // crashed 0.2.0's first build ("setGraph() before getGraph()").
+            var addKidAfterOnboarding by remember { mutableStateOf(false) }
+            if (onboarding) {
+                val kids by c.kids.kids.collectAsState()
+                LaunchedEffect(Unit) { c.kids.load() }
+                OnboardingScreen(c, hasKids = !kids.isNullOrEmpty()) { addKid ->
+                    c.settings.onboardingDone = true
+                    // The guide is this version's news: no «Novedades» sheet right after it.
+                    c.settings.seenVersionCode = BuildConfig.VERSION_CODE
+                    onboarding = false
+                    addKidAfterOnboarding = addKid
+                }
+                return@CompositionLocalProvider
+            }
             val entry by nav.currentBackStackEntryAsState()
             val dest = entry?.destination
             val topLevel = dest == null || dest.hasRoute(HomeRoute::class) || dest.hasRoute(TablesRoute::class) || dest.hasRoute(ExploreRoute::class)
@@ -245,6 +264,14 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                             onBack = { nav.popBackStack() },
                         )
                     }
+                }
+            }
+
+            LaunchedEffect(addKidAfterOnboarding) {
+                if (addKidAfterOnboarding) {
+                    androidx.compose.runtime.snapshotFlow { nav.currentBackStackEntry }.first { it != null }
+                    addKidAfterOnboarding = false
+                    nav.navigate(KidEditorRoute())
                 }
             }
 

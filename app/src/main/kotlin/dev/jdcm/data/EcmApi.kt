@@ -22,7 +22,13 @@ import java.io.IOException
 import kotlin.coroutines.cancellation.CancellationException
 
 /** Why a fetch failed, in the words the UI needs: no network, or the site itself. */
-class SourceException(val offline: Boolean, message: String, cause: Throwable? = null) : IOException(message, cause)
+class SourceException(
+    val offline: Boolean,
+    message: String,
+    cause: Throwable? = null,
+    /** False when asking again cannot help (a 4xx, an absurd answer): no retries then. */
+    val retryable: Boolean = true,
+) : IOException(message, cause)
 
 /**
  * The public JSON of juegosdeportivos.ecmadrid.org — the same calls its own calendar and results
@@ -84,7 +90,7 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
-                    val retryable = e is IOException && !(e is SourceException && !e.retryable) || e is UnexpectedResponse
+                    val retryable = if (e is SourceException) e.retryable else e is IOException || e is UnexpectedResponse
                     DiagLog.w(TAG, "$name failed attempt=$attempt ${e.javaClass.simpleName}: ${e.message?.take(80)}")
                     if (!retryable || attempt >= MAX_ATTEMPTS) throw asSourceException(e)
                     delay(wait)
@@ -95,8 +101,6 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
             error("unreachable")
         }
 
-    private val SourceException.retryable: Boolean get() = !message.orEmpty().startsWith("HTTP 4")
-
     private fun fetch(url: HttpUrl): String {
         val req = Request.Builder().url(url)
             .header("User-Agent", USER_AGENT)
@@ -105,8 +109,11 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
             .build()
         http.newCall(req).execute().use { resp ->
             // A redirect to /Login (followed by OkHttp) shows up as HTML: the parser reports it.
-            if (!resp.isSuccessful) throw SourceException(offline = false, "HTTP ${resp.code}")
-            return resp.body.string()
+            if (!resp.isSuccessful) throw SourceException(offline = false, "HTTP ${resp.code}", retryable = resp.code >= 500 || resp.code == 429)
+            // The biggest real answer (a sport's whole round) is ~250 KB: anything near the cap is not ours.
+            val source = resp.body.source()
+            if (source.request(MAX_BODY_BYTES + 1)) throw SourceException(offline = false, "body over ${MAX_BODY_BYTES / 1024} KB", retryable = false)
+            return source.buffer.readUtf8()
         }
     }
 
@@ -123,6 +130,7 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
         const val SEASON_ID = 12 // TEMPORADA 2026-2027, the active one (inline in the site's pages)
         private const val MIN_GAP_MS = 350L
         private const val MAX_ATTEMPTS = 3
+        private const val MAX_BODY_BYTES = 4L * 1024 * 1024
         val USER_AGENT = "JDCM/${BuildConfig.VERSION_NAME} (Android; family app; +https://github.com/olemoudi/jdcm)"
 
         /** The site's public pages, for "open on the web". */

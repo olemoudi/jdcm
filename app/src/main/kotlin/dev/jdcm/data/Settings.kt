@@ -22,6 +22,12 @@ data class SettingsState(
 /** Small, synchronous preferences (SharedPreferences), exposed as one state flow. */
 class Settings(context: Context) {
     private val p = context.applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE)
+    /**
+     * What belongs to this install on this phone (permissions guide done, worker enqueued, what was
+     * reminded or seen). Not in the backup rules: restored onto a new phone, these would skip the
+     * permission guide and leave the background sync unscheduled.
+     */
+    private val d = context.applicationContext.getSharedPreferences("device", Context.MODE_PRIVATE)
     private val mutable = MutableStateFlow(read())
     val state: StateFlow<SettingsState> = mutable.asStateFlow()
 
@@ -49,19 +55,30 @@ class Settings(context: Context) {
 
     /** The versionCode whose «Novedades» the user has seen; 0 on a fresh install. */
     var seenVersionCode: Int
-        get() = p.getInt("seenVersionCode", 0)
-        set(v) = p.edit { putInt("seenVersionCode", v) }
+        get() = d.getInt("seenVersionCode", 0)
+        set(v) = d.edit { putInt("seenVersionCode", v) }
 
     /** Match ids already reminded, so a reminder is never posted twice (kept short). */
     var remindedMatchIds: Set<String>
-        get() = p.getStringSet("reminded", emptySet()).orEmpty()
-        set(v) = p.edit { putStringSet("reminded", v.toList().takeLast(60).toSet()) }
+        get() = d.getStringSet("reminded", emptySet()).orEmpty()
+        set(v) = d.edit { putStringSet("reminded", v.toList().takeLast(60).toSet()) }
 
     var lastBackgroundSyncMs: Long
-        get() = p.getLong("lastBgSync", 0)
-        set(v) = p.edit { putLong("lastBgSync", v) }
+        get() = d.getLong("lastBgSync", 0)
+        set(v) = d.edit { putLong("lastBgSync", v) }
 
-    var askedNotifications: Boolean
-        get() = p.getBoolean("askedNotif", false)
-        set(v) = p.edit { putBoolean("askedNotif", v) }
+    /** The versionCode that last enqueued the periodic sync (re-enqueued after each update only). */
+    var scheduledForVersion: Int
+        get() = d.getInt("scheduledForVersion", 0)
+        set(v) = d.edit { putInt("scheduledForVersion", v) }
+
+    /** The first-run guide (permissions) was completed or skipped through to the end. */
+    var onboardingDone: Boolean
+        get() = d.getBoolean("onboardingDone", false)
+        set(v) = d.edit { putBoolean("onboardingDone", v) }
+
+    /** Home's install-permission reminder stays hidden until this time ("Más tarde"). */
+    var installBannerSnoozedUntil: Long
+        get() = d.getLong("installBannerSnoozedUntil", 0)
+        set(v) = d.edit { putLong("installBannerSnoozedUntil", v) }
 }

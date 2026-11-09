@@ -11,7 +11,6 @@ import androidx.work.WorkerParameters
 import dev.jdcm.JdcmApp
 import dev.jdcm.data.SyncMode
 import dev.jdcm.diag.DiagLog
-import dev.jdcm.notify.Reminders
 import java.util.concurrent.TimeUnit
 
 /**
@@ -30,10 +29,10 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         }
         val started = System.currentTimeMillis()
         DiagLog.i(TAG, "run attempt=$runAttemptCount kids=${kids.size}")
-        val ok = c.repository.syncKids(SyncMode.BACKGROUND, "worker")
+        val outcomes = c.repository.syncKids(SyncMode.BACKGROUND, "worker")
         c.settings.lastBackgroundSyncMs = System.currentTimeMillis()
-        Reminders.arm(app)
-        DiagLog.i(TAG, "end ok=$ok/${kids.map { it.groupId }.distinct().size} in ${System.currentTimeMillis() - started}ms")
+        // The repository re-arms the reminder after any sync that brought data (from here or a screen).
+        DiagLog.i(TAG, "end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()
     }
 

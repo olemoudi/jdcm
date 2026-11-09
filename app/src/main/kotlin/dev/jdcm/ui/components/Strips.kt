@@ -98,6 +98,7 @@ fun MatchdayStrip(
                 val isCurrent = d == current
                 val thisWeekend = !today.isBefore(d.minusDays(1)) && !today.isAfter(d.plusDays(1))
                 val top = when {
+                    d == today -> stringResource(R.string.today_short)
                     thisWeekend -> stringResource(R.string.this_weekend_short)
                     else -> fmt.monthShort(d)
                 }

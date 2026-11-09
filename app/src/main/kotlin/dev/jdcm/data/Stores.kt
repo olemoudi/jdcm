@@ -16,41 +16,59 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.io.FileOutputStream
 
 val StoreJson = Json { ignoreUnknownKeys = true; encodeDefaults = true; explicitNulls = false }
 
 /**
- * One JSON file, written atomically (temp file + rename): a crash mid-write leaves the previous
- * version, never half a file. A file that does not parse is set aside (`.bad`) and logged, and the
- * caller gets null — the app then refetches instead of crashing on its own cache.
+ * One JSON file, written atomically and durably: a temp file synced to disk, the previous version
+ * kept as `.bak`, then a rename. A crash mid-write leaves the previous version, never half a file.
+ * A file that does not parse is set aside (`.bad`, logged) and the `.bak` is read instead, so a
+ * torn write can never turn "two children" into "no children".
  */
 class JsonFile<T>(private val file: File, private val serializer: KSerializer<T>) {
     private val lock = Mutex()
+    private val bak get() = File(file.parentFile, file.name + ".bak")
 
     suspend fun read(): T? = withContext(Dispatchers.IO) {
         lock.withLock {
-            if (!file.exists()) return@withLock null
-            runCatching { StoreJson.decodeFromString(serializer, file.readText()) }.getOrElse { e ->
-                DiagLog.w("Store", "unreadable ${file.name}: ${e.javaClass.simpleName}; set aside")
+            parse(file)?.let { return@withLock it }
+            if (file.exists()) {
+                DiagLog.w("Store", "unreadable ${file.name}; set aside, trying the backup")
                 runCatching { file.renameTo(File(file.parentFile, file.name + ".bad")) }
-                null
             }
+            parse(bak)?.also { DiagLog.w("Store", "${file.name} restored from its backup") }
         }
+    }
+
+    private fun parse(f: File): T? {
+        if (!f.exists()) return null
+        return runCatching { StoreJson.decodeFromString(serializer, f.readText()) }
+            .onFailure { DiagLog.w("Store", "cannot parse ${f.name}: ${it.javaClass.simpleName}") }
+            .getOrNull()
     }
 
     suspend fun write(value: T) = withContext(Dispatchers.IO) {
         lock.withLock {
             file.parentFile?.mkdirs()
             val tmp = File(file.parentFile, file.name + ".tmp")
-            tmp.writeText(StoreJson.encodeToString(serializer, value))
+            FileOutputStream(tmp).use { out ->
+                out.write(StoreJson.encodeToString(serializer, value).toByteArray(Charsets.UTF_8))
+                out.flush()
+                out.fd.sync()
+            }
+            if (file.exists()) {
+                bak.delete()
+                if (!file.renameTo(bak)) file.copyTo(bak, overwrite = true)
+            }
             if (!tmp.renameTo(file)) {
-                file.delete()
-                tmp.renameTo(file)
+                tmp.copyTo(file, overwrite = true)
+                tmp.delete()
             }
         }
     }
 
-    suspend fun delete() = withContext(Dispatchers.IO) { lock.withLock { file.delete() } }
+    suspend fun delete() = withContext(Dispatchers.IO) { lock.withLock { file.delete(); bak.delete() } }
 }
 
 /** Every group the app has looked at, on disk and in memory. Screens collect [snapshots]. */
@@ -79,18 +97,29 @@ class GroupCache(context: Context) {
         file(s.group.id).write(s)
     }
 
-    /** Groups nobody follows any more and nobody opened for a month go: the cache stays small. */
+    /**
+     * Groups nobody follows any more and nobody opened for a month go, with their backups; leftovers
+     * of interrupted writes or set-aside files go after a week. The cache stays at a few hundred KB.
+     */
     suspend fun prune(keep: Set<Int>, olderThanMs: Long) = withContext(Dispatchers.IO) {
+        val weekAgo = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
+        var removed = 0
         dir.listFiles()?.forEach { f ->
-            val id = f.name.removeSuffix(".json").toIntOrNull() ?: return@forEach
-            if (id !in keep && f.lastModified() < olderThanMs) {
-                f.delete()
-                mutable.update { it - id }
+            val id = f.name.substringBefore('.').toIntOrNull()
+            val leftover = f.name.endsWith(".tmp") || f.name.endsWith(".bad")
+            val gone = id != null && id !in keep && f.lastModified() < olderThanMs
+            if (gone || (leftover && f.lastModified() < weekAgo)) {
+                if (f.delete()) removed++
+                if (gone && f.name.endsWith(".json")) mutable.update { it - id!! }
             }
         }
+        if (removed > 0) DiagLog.i("Store", "pruned $removed cache files")
     }
 
-    fun ids(): List<Int> = dir.listFiles()?.mapNotNull { it.name.removeSuffix(".json").toIntOrNull() }.orEmpty()
+    fun ids(): List<Int> = dir.listFiles()?.filter { it.name.endsWith(".json") }?.mapNotNull { it.name.removeSuffix(".json").toIntOrNull() }.orEmpty()
+
+    /** Bytes on disk, for the diagnostic report. */
+    fun sizeBytes(): Long = dir.listFiles()?.sumOf { it.length() } ?: 0L
 }
 
 /**

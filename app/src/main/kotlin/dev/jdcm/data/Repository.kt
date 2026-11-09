@@ -11,7 +11,13 @@ import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.Team
 import dev.jdcm.core.policy.RefreshPolicy
 import dev.jdcm.diag.DiagLog
+import dev.jdcm.core.parse.UnexpectedResponse
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -42,11 +48,16 @@ enum class SyncMode {
 /** A team found while setting a child up: which group of the category it plays in. */
 data class TeamInGroup(val team: Team, val group: Group)
 
+enum class SyncOutcome { FRESH, FETCHED, FAILED }
+
 class Repository(
+    private val scope: CoroutineScope,
     private val api: EcmApi,
     private val cache: GroupCache,
     private val kids: KidStore,
     private val onChanges: suspend (List<Pair<Kid, MatchChange>>) -> Unit,
+    /** After any sync that brought data: the eve-of-match alarm may need to move. */
+    private val onFetched: () -> Unit = {},
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
     val snapshots: StateFlow<Map<Int, GroupSnapshot>> = cache.snapshots
@@ -62,65 +73,115 @@ class Repository(
     private fun now(): LocalDateTime = LocalDateTime.now(MADRID)
 
     /**
-     * Brings a group up to date by fetching, one by one, the rounds the policy names. A failure
-     * keeps everything already held (and every round fetched before it in this pass), and is
-     * reported in [status]. Returns true when the group was fetched (or was fresh enough).
+     * Brings a group up to date, defensively. The gate is the last *attempt* (not the last success),
+     * so a site that keeps failing is asked at the policy's pace, never in a loop. Rounds go closest
+     * to today first; each answer also refreshes its neighbours. One bad round does not stop the
+     * others (only being offline does), and a sync never runs longer than [SYNC_BUDGET_MS]. What
+     * was fetched is saved and reported even if the screen that started it goes away.
      */
-    suspend fun sync(ref: GroupRef, mode: SyncMode, reason: String): Boolean = lock(ref.groupId).withLock {
+    suspend fun sync(ref: GroupRef, mode: SyncMode, reason: String): SyncOutcome = lock(ref.groupId).withLock {
         val before = cache.get(ref.groupId)
         val now = now()
-        val age = nowMs() - (before?.newestFetch ?: 0L)
+        val startedMs = nowMs()
         val limit = when (mode) {
             SyncMode.IF_STALE -> RefreshPolicy.foregroundMaxAgeMs(now)
             SyncMode.BACKGROUND -> RefreshPolicy.backgroundMaxAgeMs(now)
             SyncMode.FORCE -> 0L
         }
-        val complete = before != null && before.rounds.isNotEmpty() && before.missingRounds.isEmpty()
-        if (complete && age < limit) return@withLock true
+        val sinceAttempt = startedMs - (before?.lastAttemptMs ?: 0L)
+        // A group that never loaded (its first fetch failed) is retried after a short pause, not
+        // after the full gate: a child added while offline must not wait hours. A clock that was
+        // ahead (negative age) never blocks.
+        val gate = if (before?.rounds.isNullOrEmpty()) minOf(limit, EMPTY_RETRY_MS) else limit
+        if (mode != SyncMode.FORCE && before != null && sinceAttempt in 0 until gate) return@withLock SyncOutcome.FRESH
 
         val tag = "#${ref.groupId}"
-        DiagLog.i(TAG, "sync $tag start mode=$mode reason=$reason age=${age / 60_000}min rounds=${before?.rounds?.size ?: 0}")
-        val started = nowMs()
-        var snap = before ?: GroupSnapshot(Group(ref.groupId, ""), ref.sportId, ref.competitionId, ref.categoryId)
-        var fetched = 0
+        var snap = (before ?: GroupSnapshot(Group(ref.groupId, ""), ref.sportId, ref.competitionId, ref.categoryId)).copy(lastAttemptMs = startedMs)
+        var asked = 0
+        var failed = 0
+        var offline = false
+        var lastError: Exception? = null
         try {
-            val fetchedIds = HashSet<Int>()
             if (snap.rounds.isEmpty()) {
-                setStatus(ref.groupId) { SyncStatus(running = true, done = 0, total = 0) }
-                val page = api.round(ref, 0)
-                snap = snap.merge(page, nowMs(), wasCurrentRequest = true)
-                page.round?.let { fetchedIds += it.id }
-                fetched++
-                cache.put(snap)
+                setStatus(ref.groupId) { SyncStatus(running = true) }
+                asked++
+                snap = fetchInto(snap, ref, 0)
             }
-            val todo = RefreshPolicy.roundsToFetch(snap, now, nowMs()).filter { it.id !in fetchedIds }
-            val total = todo.size + fetched
-            setStatus(ref.groupId) { SyncStatus(running = true, done = fetched, total = total) }
+            val todo = RefreshPolicy.roundsToFetch(snap, now, nowMs(), limit)
+            DiagLog.i(TAG, "sync $tag start mode=$mode reason=$reason due=${todo.size}/${snap.rounds.size} sinceAttempt=${sinceAttempt / 60_000}min")
+            var done = 0
             for (r in todo) {
-                val page = api.round(ref, r.id)
-                snap = snap.merge(page, nowMs(), wasCurrentRequest = false)
-                fetched++
-                setStatus(ref.groupId) { SyncStatus(running = true, done = fetched, total = total) }
-                // Saved as it goes: a long first sync interrupted half way keeps its half.
-                if (fetched % 4 == 0) cache.put(snap)
+                setStatus(ref.groupId) { SyncStatus(running = true, done = done, total = todo.size) }
+                done++
+                // An earlier answer of this very sync may have brought this round as a neighbour.
+                val stamped = snap.roundFetchedAt[r.id]
+                if (stamped != null && stamped >= startedMs) continue
+                if (!RefreshPolicy.isDue(snap, r, now, nowMs(), limit)) continue
+                if (nowMs() - startedMs > SYNC_BUDGET_MS) {
+                    DiagLog.w(TAG, "sync $tag out of time after $asked requests; the rest next time")
+                    break
+                }
+                asked++
+                try {
+                    snap = fetchInto(snap, ref, r.id)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    failed++
+                    lastError = e
+                    offline = (e as? SourceException)?.offline == true
+                    // Only an odd answer about this one round lets the others go ahead; the site
+                    // being down, slow or refusing (5xx, 429, timeouts) ends the sync at once.
+                    val roundSpecific = e is UnexpectedResponse || e.cause is UnexpectedResponse
+                    DiagLog.w(TAG, "sync $tag round #${r.id} failed offline=$offline roundSpecific=$roundSpecific ${e.javaClass.simpleName}: ${e.message?.take(60)}")
+                    if (!roundSpecific) break
+                }
             }
-            cache.put(snap)
-            setStatus(ref.groupId) { SyncStatus() }
-            DiagLog.i(TAG, "sync $tag done rounds=$fetched in ${nowMs() - started}ms matches=${snap.matches.size}")
-            report(before, snap)
-            true
         } catch (e: CancellationException) {
-            if (fetched > 0) cache.put(snap)
-            setStatus(ref.groupId) { SyncStatus() }
             throw e
         } catch (e: Exception) {
-            if (fetched > 0) cache.put(snap)
-            val offline = (e as? SourceException)?.offline == true
-            DiagLog.w(TAG, "sync $tag failed after $fetched rounds offline=$offline ${e.javaClass.simpleName}")
-            setStatus(ref.groupId) { SyncStatus(error = e.message ?: e.javaClass.simpleName, offline = offline, errorAtMs = nowMs()) }
-            if (fetched > 0) report(before, snap)
-            false
+            failed++
+            lastError = e
+            offline = (e as? SourceException)?.offline == true
+            DiagLog.w(TAG, "sync $tag first round failed offline=$offline ${e.javaClass.simpleName}: ${e.message?.take(60)}")
+        } finally {
+            // Saved, reported and cleared whatever happened, cancellation included.
+            withContext(NonCancellable) {
+                runCatching { cache.put(snap) }.onFailure { DiagLog.w(TAG, "sync $tag could not save: ${it.javaClass.simpleName}") }
+                val err = lastError
+                setStatus(ref.groupId) {
+                    if (err != null && (offline || failed == asked)) SyncStatus(error = err.message ?: err.javaClass.simpleName, offline = offline, errorAtMs = nowMs())
+                    else SyncStatus()
+                }
+                if (asked > failed) {
+                    report(before, snap)
+                    runCatching { onFetched() }
+                }
+            }
         }
+        DiagLog.i(TAG, "sync $tag end asked=$asked failed=$failed in ${nowMs() - startedMs}ms matches=${snap.matches.size}")
+        when {
+            asked == 0 -> SyncOutcome.FRESH
+            failed == asked -> SyncOutcome.FAILED
+            else -> SyncOutcome.FETCHED
+        }
+    }
+
+    /** One request: the site's answer for [roundId] (0 = current), checked and merged. */
+    private suspend fun fetchInto(snap: GroupSnapshot, ref: GroupRef, roundId: Int): GroupSnapshot {
+        val page = api.round(ref, roundId)
+        val strangers = page.matches.count { it.groupId != 0 && it.groupId != ref.groupId }
+        if (strangers > 0 && strangers == page.matches.size) {
+            throw UnexpectedResponse("answer for another group (${page.matches.first().groupId})")
+        }
+        val got = page.round?.id
+        if (roundId != 0 && got != null && got != roundId) DiagLog.w(TAG, "asked round #$roundId, got #$got")
+        val merged = snap.merge(page, nowMs(), wasCurrentRequest = roundId == 0)
+        if (merged.rejected.isNotEmpty()) {
+            DiagLog.w(TAG, "#${ref.groupId} kept rounds ${merged.rejected} as they were: the answer had far fewer matches")
+        }
+        if (merged.dropped.isNotEmpty()) DiagLog.w(TAG, "#${ref.groupId} dropped rounds ${merged.dropped}: no longer listed by the site")
+        return merged.snapshot
     }
 
     /** Followed teams' changes in this group, handed to the notifier. */
@@ -138,14 +199,16 @@ class Repository(
         statusFlow.update { it + (groupId to f(it[groupId])) }
 
     /** Every followed group, one after the other (the site sees one request at a time anyway). */
-    suspend fun syncKids(mode: SyncMode, reason: String): Int {
-        val list = kids.current()
-        var ok = 0
-        for (ref in list.map { it.ref }.distinctBy { it.groupId }) {
-            if (sync(ref, mode, reason)) ok++
-        }
-        return ok
-    }
+    suspend fun syncKids(mode: SyncMode, reason: String): List<SyncOutcome> =
+        kids.current().map { it.ref }.distinctBy { it.groupId }.map { sync(it, mode, reason) }
+
+    /**
+     * Started from a screen but owned by the app: leaving the screen does not cancel it. The
+     * returned job can be joined (pull to refresh) without tying its fate to the caller.
+     */
+    fun syncInBackground(ref: GroupRef, mode: SyncMode, reason: String): Job = scope.launch { sync(ref, mode, reason) }
+
+    fun syncKidsInBackground(mode: SyncMode, reason: String): Job = scope.launch { syncKids(mode, reason) }
 
     // --- the explorer's lists: small, cached in memory for a few hours ------------------------
 
@@ -193,7 +256,7 @@ class Repository(
             val teams = cached?.teams ?: run {
                 val ref = GroupRef(g.id, sportId, competitionId, categoryId)
                 val page = api.round(ref, 0)
-                val snap = (cache.get(g.id) ?: GroupSnapshot(g, sportId, competitionId, categoryId)).merge(page, nowMs(), true)
+                val snap = (cache.get(g.id) ?: GroupSnapshot(g, sportId, competitionId, categoryId)).merge(page, nowMs(), true).snapshot
                 cache.put(snap)
                 snap.teams
             }
@@ -205,5 +268,9 @@ class Repository(
 
     companion object {
         private const val TAG = "Repo"
+        /** A sync never holds the group (and a worker) longer than this; the rest waits for the next one. */
+        const val SYNC_BUDGET_MS = 3 * 60_000L
+        /** A group with nothing loaded yet is tried again after this, whatever the mode's pace. */
+        const val EMPTY_RETRY_MS = 10 * 60_000L
     }
 }

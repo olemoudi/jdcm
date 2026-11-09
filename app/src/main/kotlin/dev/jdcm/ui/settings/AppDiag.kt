@@ -34,7 +34,10 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
         listOf(
             "theme=${s.theme} changes=${s.notifyChanges} results=${s.notifyResults} reminder=${s.notifyReminder}@${s.reminderHour}h showClosed=${s.showClosed}",
             "notifications allowed=${c.notifier.canPost()} lastBackgroundSync=${at(c.settings.lastBackgroundSyncMs)} matchWindow=${RefreshPolicy.isMatchWindow(now)}",
-            "seenVersionCode=${c.settings.seenVersionCode} reminded=${c.settings.remindedMatchIds.size}",
+            "seenVersionCode=${c.settings.seenVersionCode} reminded=${c.settings.remindedMatchIds.size} onboardingDone=${c.settings.onboardingDone}",
+            "installPermission=${dev.jdcm.ui.onboarding.Perms.canInstall(c.app)}" +
+                (if (!dev.jdcm.ui.onboarding.Perms.canInstall(c.app)) " UPDATES CANNOT INSTALL" else "") +
+                " bannerSnoozedUntil=${at(c.settings.installBannerSnoozedUntil)}",
         ),
     )
     val kidLines = kids.map { k ->
@@ -51,8 +54,8 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
             else -> ""
         }
         "#${g.group.id} sport=${g.sportId} rounds=${g.rounds.size} matches=${g.matches.size} results=$results unknownState=$unknown " +
-            "newest=${at(g.newestFetch)} oldest=${at(g.oldestFetch)} followed=${kids.any { it.groupId == g.group.id }}$flag"
-    }.ifEmpty { listOf("none cached") }
+            "newest=${at(g.newestFetch)} oldest=${at(g.oldestFetch)} attempt=${at(g.lastAttemptMs)} followed=${kids.any { it.groupId == g.group.id }}$flag"
+    }.ifEmpty { listOf("none cached") } + "cache on disk ${c.groups.sizeBytes() / 1024} KB in ${c.groups.ids().size} groups"
 
     val states = snaps.values.flatMap { it.matches }
         .groupingBy { "${it.statusId}:${it.statusName}:closed=${it.closed}:winner=${it.winnerId != 0}" }.eachCount()

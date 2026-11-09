@@ -1,9 +1,5 @@
 package dev.jdcm.ui.home
 
-import android.Manifest
-import android.os.Build
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -77,11 +73,13 @@ import dev.jdcm.ui.components.Hairline
 import dev.jdcm.ui.components.KidPills
 import dev.jdcm.ui.components.MatchCard
 import dev.jdcm.ui.components.MatchdayStrip
+import dev.jdcm.ui.components.NotLoadedYet
 import dev.jdcm.ui.components.SectionHeader
 import dev.jdcm.ui.components.sportIcon
 import dev.jdcm.ui.format.Format
 import dev.jdcm.ui.nav.GroupRoute
 import dev.jdcm.ui.nav.TeamRoute
+import dev.jdcm.ui.onboarding.InstallPermissionBanner
 import dev.jdcm.ui.theme.JdcmColors
 import dev.jdcm.ui.theme.kidColor
 import kotlinx.coroutines.launch
@@ -110,11 +108,8 @@ fun HomeScreen(
     var showPicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { c.kids.load() }
-    LaunchedEffect(kidsOrNull) {
-        kidsOrNull?.forEach { c.repository.load(it.groupId) }
-        if (!kidsOrNull.isNullOrEmpty()) c.repository.syncKids(SyncMode.IF_STALE, "home")
-    }
-    NotificationPermissionAsk(c, hasKids = !kidsOrNull.isNullOrEmpty())
+    // Loading only: the app's own start (JdcmApp, "shown") refreshes the children's groups.
+    LaunchedEffect(kidsOrNull) { kidsOrNull?.forEach { c.repository.load(it.groupId) } }
 
     val kids = kidsOrNull.orEmpty()
     val visible = if (selectedKid == null) kids else kids.filter { it.id == selectedKid }.ifEmpty { kids }
@@ -137,7 +132,9 @@ fun HomeScreen(
     ) { pad ->
         when {
             kidsOrNull == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            kids.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad), verticalArrangement = Arrangement.Center) {
+            kids.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad)) {
+                InstallPermissionBanner(c)
+                Spacer(Modifier.weight(1f))
                 EmptyState(
                     Icons.Filled.FamilyRestroom,
                     stringResource(R.string.empty_title),
@@ -145,18 +142,20 @@ fun HomeScreen(
                     primary = stringResource(R.string.add_kid) to onAddKid,
                     secondary = stringResource(R.string.explore_all) to onExplore,
                 )
+                Spacer(Modifier.weight(1f))
             }
             else -> PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = {
                     scope.launch {
                         refreshing = true
-                        try { c.repository.syncKids(SyncMode.FORCE, "pull") } finally { refreshing = false }
+                        try { c.repository.syncKidsInBackground(SyncMode.FORCE, "pull").join() } finally { refreshing = false }
                     }
                 },
                 modifier = Modifier.fillMaxSize().padding(pad),
             ) {
                 LazyColumn(Modifier.fillMaxSize()) {
+                    item(key = "banner") { InstallPermissionBanner(c) }
                     item(key = "pills") { KidPills(kids, selectedKid, { selectedKid = it }, onAdd = onAddKid) }
                     item(key = "strip") {
                         if (days.isNotEmpty()) {
@@ -240,7 +239,8 @@ private fun LazyListScope.kidSection(
         Column {
             if (snap == null || snap.rounds.isEmpty()) {
                 FlatCard {
-                    FreshnessLine(status ?: SyncStatus(running = true), 0)
+                    val c2 = dev.jdcm.ui.LocalContainer.current
+                    NotLoadedYet(status, onRetry = { c2.repository.syncInBackground(ref, SyncMode.FORCE, "retry") })
                     if (status?.error != null) {
                         TextButton(onClick = { onGroup(groupRoute(kid, 0)) }, modifier = Modifier.padding(horizontal = 8.dp)) {
                             Text(stringResource(R.string.open_group))
@@ -266,6 +266,11 @@ private fun LazyListScope.kidSection(
                 } else {
                     NoMatchRow(kid, snap, day)
                 }
+            }
+            // The latest result stays in sight while the matchday on screen is still to be played.
+            val last = remember(snap) { Schedule.last(snap, kid.teamId) }
+            if (last != null && (mine == null || !mine.hasResult) && last.id != mine?.id) {
+                LastResultRow(kid, last) { actions.openMatch(MatchArgs(last, ref, kid.teamId, accent, kid.name)) }
             }
             if (others.isNotEmpty()) {
                 Row(
@@ -325,6 +330,36 @@ private fun NoMatchRow(kid: Kid, snap: GroupSnapshot, day: LocalDate?) {
     }
 }
 
+@Composable
+private fun LastResultRow(kid: Kid, m: dev.jdcm.core.model.Match, onClick: () -> Unit) {
+    val ctx = LocalContext.current
+    val fmt = remember(ctx) { Format(ctx) }
+    val extra = JdcmColors.extra
+    val home = m.home?.id == kid.teamId
+    val mine = if (home) m.homeScore else m.awayScore
+    val theirs = if (home) m.awayScore else m.homeScore
+    val outcome = Standings.outcome(m, kid.teamId)
+    val (label, color) = when (outcome) {
+        dev.jdcm.core.standings.Outcome.WIN -> stringResource(R.string.res_win, mine, theirs) to extra.win
+        dev.jdcm.core.standings.Outcome.DRAW -> stringResource(R.string.res_draw, mine, theirs) to extra.draw
+        dev.jdcm.core.standings.Outcome.LOSS -> stringResource(R.string.res_loss, mine, theirs) to extra.loss
+    }
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 52.dp).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(stringResource(R.string.last_result), style = MaterialTheme.typography.labelLarge, color = extra.muted)
+        Spacer(Modifier.width(10.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = color, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            stringResource(R.string.vs_team, m.opponentOf(kid.teamId)?.name.orEmpty()) + (m.day?.let { " · " + fmt.dayMonth(it) } ?: ""),
+            style = MaterialTheme.typography.bodySmall, color = extra.muted, maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+        )
+    }
+}
+
 /** Marca's links under a competition: "Resultados · Clasificación · Trofeos". */
 @Composable
 fun FooterLinks(links: List<Pair<String, () -> Unit>>) {
@@ -341,18 +376,3 @@ fun groupRoute(kid: Kid, tab: Int) = GroupRoute(
     kid.groupId, kid.sportId, kid.competitionId, kid.categoryId,
     title = kid.groupName, tab = tab, teamId = kid.teamId, kidColor = kid.color,
 )
-
-/** Asks for notifications once, right after the first child is added: the moment they make sense. */
-@Composable
-private fun NotificationPermissionAsk(c: AppContainer, hasKids: Boolean) {
-    if (Build.VERSION.SDK_INT < 33) return
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        dev.jdcm.diag.DiagLog.i("UI", "notifications permission granted=$granted")
-    }
-    LaunchedEffect(hasKids) {
-        if (hasKids && !c.settings.askedNotifications) {
-            c.settings.askedNotifications = true
-            launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-}
