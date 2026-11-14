@@ -1,13 +1,13 @@
 {
-  "versionCode": 3,
-  "versionName": "0.2.1-alpha",
-  "tag": "v0.2.1-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.1-alpha/jdcm.apk",
-  "assetId": 728937192,
-  "size": 4475265,
-  "sha256": "05f44de8d08f9f3a529bdadce69425d8e32d22ef908723c94faa72b6fa8a2cfe",
+  "versionCode": 5,
+  "versionName": "0.2.2-alpha",
+  "tag": "v0.2.2-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.2-alpha/jdcm.apk",
+  "assetId": 747223958,
+  "size": 4476089,
+  "sha256": "ade16c1401e21c734fbd9ac7e37dd7a74efe95d4cb251fbb88546324227541f9",
   "notes": {
-    "es": "• Junto al equipo de tu hijo aparece su nombre, en su color, en cada partido.\n• Bajo las fechas se explica qué significan los puntos de colores.",
-    "en": "• Your child's name, in their colour, now appears next to their team in every match.\n• A line under the dates explains what the coloured dots mean."
+    "es": "• En las 4 h antes de cada partido la app mira la web cada ~15 min y avisa al momento si se suspende o cambia de hora.\n• Los partidos no celebrados (lluvia) ya no tienen recordatorio, y si un partido cambia de día se avisa «cambio de fecha».\n• Un partido «disputado con incidencias» sin marcador ya no cuenta como 0-0: sale «Resultado pendiente».",
+    "en": "• In the 4 h before each match the app checks the site every ~15 min and tells you at once if it's called off or moved.\n• Rained-off matches no longer get a reminder, and a match moved to another day is announced as «new date».\n• A match «played with incidents» with no score no longer counts as 0-0: it shows «Result pending»."
   }
 }
