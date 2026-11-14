@@ -53,8 +53,8 @@ android {
         targetSdk = 36
         // release.yml reads these two lines out of this file: keep exactly one of each, and never
         // write either name followed by an equals sign anywhere else in here.
-        versionCode = 5
-        versionName = "0.2.2-alpha"
+        versionCode = 6
+        versionName = "0.2.2-beta"
 
         val sha = git("rev-parse", "--short=10", "HEAD").ifEmpty { "unknown" }
         val dirty = if (git("status", "--porcelain").isNotEmpty()) "+dirty" else ""
