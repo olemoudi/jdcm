@@ -139,6 +139,8 @@ private fun StatusLine(match: Match, fmt: Format, showDate: Boolean) {
             match.status == MatchStatus.UNSCHEDULED -> Label(stringResource(R.string.status_unscheduled).uppercase(), extra.danger)
             match.status == MatchStatus.POSTPONED -> Label(stringResource(R.string.status_postponed).uppercase(), extra.danger)
             match.status == MatchStatus.NOT_HELD -> Label(stringResource(R.string.status_not_held).uppercase(), extra.danger)
+            // Played "with incidents": the site leaves the score empty until it is ruled on.
+            match.status == MatchStatus.PLAYED && !match.hasResult -> Label(stringResource(R.string.status_no_score).uppercase(), extra.muted)
             match.hasResult -> Text(
                 stringResource(R.string.status_final),
                 style = MaterialTheme.typography.bodyMedium,

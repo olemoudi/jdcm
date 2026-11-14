@@ -138,8 +138,13 @@ class Notifier(private val context: Context, private val settings: Settings) {
             }
             is MatchChange.Rescheduled -> {
                 val firstTime = !c.before.timeKnown && m.timeKnown && c.before.day == m.day
-                if (firstTime) context.getString(R.string.notif_time_set, kid.name) to base
-                else context.getString(R.string.notif_rescheduled, kid.name) to
+                val title = when {
+                    firstTime -> R.string.notif_time_set
+                    c.before.day != null && c.before.day != m.day -> R.string.notif_redated
+                    else -> R.string.notif_rescheduled
+                }
+                if (firstTime) context.getString(title, kid.name) to base
+                else context.getString(title, kid.name) to
                     base + "\n" + context.getString(R.string.notif_before, fmt.whenLine(c.before))
             }
             is MatchChange.Relocated -> context.getString(R.string.notif_relocated, kid.name) to

@@ -151,6 +151,7 @@ object SiteParser {
             statusName = statusName,
             homeScore = o.int("ResultadoEquipoLocal"),
             awayScore = o.int("ResultadoEquipoVisitante"),
+            scoreKnown = o.prim("ResultadoEquipoLocal") != null && o.prim("ResultadoEquipoVisitante") != null,
             winnerId = o.int("IdEquipoGanador"),
             partials = (1..5).map { o.str("ResultadoParcial$it").trim() }.filter { it.isNotEmpty() },
             closed = o.bool("Cerrado"),

@@ -3,9 +3,11 @@ package dev.jdcm.ui.settings
 import dev.jdcm.AppContainer
 import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.MatchStatus
+import dev.jdcm.core.policy.PreMatchPolicy
 import dev.jdcm.core.policy.RefreshPolicy
 import dev.jdcm.diag.DiagSection
 import dev.jdcm.notify.Reminders
+import dev.jdcm.work.PreMatch
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -58,18 +60,27 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
     }.ifEmpty { listOf("none cached") } + "cache on disk ${c.groups.sizeBytes() / 1024} KB in ${c.groups.ids().size} groups"
 
     val states = snaps.values.flatMap { it.matches }
-        .groupingBy { "${it.statusId}:${it.statusName}:closed=${it.closed}:winner=${it.winnerId != 0}" }.eachCount()
+        .groupingBy { "${it.statusId}:${it.statusName}:closed=${it.closed}:winner=${it.winnerId != 0}:score=${it.scoreKnown}:result=${it.hasResult}" }.eachCount()
         .entries.sortedByDescending { it.value }.map { "${it.key} ×${it.value}" }
 
     val due = Reminders.nextDue(kids, snaps, s.reminderHour, now, c.settings.remindedMatchIds)
     val reminder = listOf(
         if (due == null) "next: none" else "next: ${due.first} matches=${due.second.map { it.second.id }}",
     )
+    // Pre-match checks: the alarm, the last time it fired, and the matches it watches (ids and times only).
+    val watched = PreMatch.watched(kids, snaps, now).sortedBy { it.second.start }
+    val preMatch = listOf(
+        "on=${s.notifyChanges} exactAlarms=${PreMatch.canExact(c.app.getSystemService(android.app.AlarmManager::class.java))} " +
+            "next=${at(c.settings.preMatchAlarmAtMs)} lastFired=${at(c.settings.preMatchLastCheckMs)}",
+    ) + watched.take(6).map { (k, m) ->
+        "#${k.id.take(8)} match=#${m.id} group=#${m.groupId} start=${m.start} inWindow=${PreMatchPolicy.inWindow(m, now)}"
+    }.ifEmpty { listOf("no match with a time ahead") }
     return listOf(
         settings,
         DiagSection("Kids", kidLines),
         DiagSection("Groups (now ${at(nowMs)})", groupLines),
         DiagSection("Match states seen", states.ifEmpty { listOf("none") }),
         DiagSection("Reminder", reminder),
+        DiagSection("Pre-match checks", preMatch),
     )
 }

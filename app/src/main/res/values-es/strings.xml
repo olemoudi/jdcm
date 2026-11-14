@@ -42,6 +42,7 @@
     <string name="time_tbc_short">sin hora</string>
     <string name="status_final">Finalizado</string>
     <string name="status_live">Ahora</string>
+    <string name="status_no_score">Resultado pendiente</string>
     <string name="status_modified">Modificado</string>
     <string name="status_postponed">Aplazado</string>
     <string name="status_unscheduled">Desprogramado</string>
@@ -153,6 +154,7 @@
     <string name="notif_match_text">%1$s · contra %2$s</string>
     <string name="notif_before">Antes: %1$s</string>
     <string name="notif_rescheduled">%1$s: cambio de hora</string>
+    <string name="notif_redated">%1$s: cambio de fecha</string>
     <string name="notif_time_set">%1$s: ya hay hora</string>
     <string name="notif_relocated">%1$s: cambio de campo</string>
     <string name="notif_postponed">%1$s: partido aplazado</string>

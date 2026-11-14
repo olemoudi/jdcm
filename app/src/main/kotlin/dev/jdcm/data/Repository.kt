@@ -9,6 +9,7 @@ import dev.jdcm.core.model.GroupSnapshot
 import dev.jdcm.core.model.GroupedRound
 import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.Team
+import dev.jdcm.core.policy.PreMatchPolicy
 import dev.jdcm.core.policy.RefreshPolicy
 import dev.jdcm.diag.DiagLog
 import dev.jdcm.core.parse.UnexpectedResponse
@@ -43,6 +44,8 @@ enum class SyncMode {
     FORCE,
     /** The periodic worker: only when older than the background limit. */
     BACKGROUND,
+    /** The last hours before a child's match: every check, unless the group was tried minutes ago. */
+    PRE_MATCH,
 }
 
 /** A team found while setting a child up: which group of the category it plays in. */
@@ -86,6 +89,7 @@ class Repository(
         val limit = when (mode) {
             SyncMode.IF_STALE -> RefreshPolicy.foregroundMaxAgeMs(now)
             SyncMode.BACKGROUND -> RefreshPolicy.backgroundMaxAgeMs(now)
+            SyncMode.PRE_MATCH -> PreMatchPolicy.MAX_AGE_MS
             SyncMode.FORCE -> 0L
         }
         val sinceAttempt = startedMs - (before?.lastAttemptMs ?: 0L)
@@ -199,8 +203,11 @@ class Repository(
         statusFlow.update { it + (groupId to f(it[groupId])) }
 
     /** Every followed group, one after the other (the site sees one request at a time anyway). */
-    suspend fun syncKids(mode: SyncMode, reason: String): List<SyncOutcome> =
-        kids.current().map { it.ref }.distinctBy { it.groupId }.map { sync(it, mode, reason) }
+    suspend fun syncKids(mode: SyncMode, reason: String): List<SyncOutcome> = syncKidGroups(null, mode, reason)
+
+    /** The followed groups among [groupIds] (all of them when null), one after the other. */
+    suspend fun syncKidGroups(groupIds: Set<Int>?, mode: SyncMode, reason: String): List<SyncOutcome> =
+        kids.current().map { it.ref }.distinctBy { it.groupId }.filter { groupIds == null || it.groupId in groupIds }.map { sync(it, mode, reason) }
 
     /**
      * Started from a screen but owned by the app: leaving the screen does not cancel it. The

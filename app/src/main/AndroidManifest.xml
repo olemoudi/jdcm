@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Pre-match checks every 15 min (work/PreMatch): exact alarms, which the standby bucket does not
+         throttle. Granted at install, no prompt: USE_EXACT_ALARM on 13+, SCHEDULE_EXACT_ALARM on 12. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
     <!-- First-run guide, optional step: the system's one-tap "no battery restrictions" dialog. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
@@ -51,6 +55,7 @@
         </activity>
 
         <receiver android:name=".notify.ReminderReceiver" android:exported="false" />
+        <receiver android:name=".work.PreMatchReceiver" android:exported="false" />
         <receiver android:name=".notify.BootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

@@ -42,6 +42,7 @@
     <string name="time_tbc_short">no time</string>
     <string name="status_final">Full time</string>
     <string name="status_live">Now</string>
+    <string name="status_no_score">Result pending</string>
     <string name="status_modified">Changed</string>
     <string name="status_postponed">Postponed</string>
     <string name="status_unscheduled">Off the calendar</string>
@@ -153,6 +154,7 @@
     <string name="notif_match_text">%1$s · against %2$s</string>
     <string name="notif_before">Before: %1$s</string>
     <string name="notif_rescheduled">%1$s: new time</string>
+    <string name="notif_redated">%1$s: new date</string>
     <string name="notif_time_set">%1$s: time confirmed</string>
     <string name="notif_relocated">%1$s: new venue</string>
     <string name="notif_postponed">%1$s: match postponed</string>

@@ -16,13 +16,15 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   `model/` (Match, Team, Round, `GroupSnapshot` = what is cached per group, `MatchStatus`),
   `parse/SiteParser` (tolerant JSON reader; the MVC actions return a JSON *string* holding JSON),
   `standings/Standings` + `PointsRule`, `schedule/Schedule` (next/last match, matchdays anchored on
-  Saturday), `changes/MatchChanges` (what to notify), `policy/RefreshPolicy` (when and which rounds).
+  Saturday), `changes/MatchChanges` (what to notify), `policy/RefreshPolicy` (when and which rounds),
+  `policy/PreMatchPolicy` (the last hours before a child's match).
   Real responses from the site are fixtures in `core/src/test/resources/fixtures/`.
 - `:app` — `data/` (`EcmApi`: one request at a time, 350 ms apart, honest User-Agent, retries;
   `GroupCache`/`KidStore`/`JsonFile`: atomic JSON files; `Settings`: SharedPreferences;
   `Repository`: sync by rounds with progress, explorer lists, team discovery), `notify/` (channels,
   texts, `Reminders` = one inexact `AlarmManager` alarm, re-armed after every sync/boot/fire),
-  `work/SyncWorker` (hourly; the policy decides if anything is fetched), `ui/` (Compose screens),
+  `work/SyncWorker` (hourly; the policy decides if anything is fetched; also the one-off pre-match
+  check), `work/PreMatch` (the pre-match alarm), `ui/` (Compose screens),
   `update/` + `diag/` (from the oleskills `android-update-channels` and `android-diagnostic-log` skills).
   Manual DI in `AppContainer` (`JdcmApp.kt`).
 
@@ -34,12 +36,21 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
 - **Standings are not public** (`/Clasificaciones` needs a login): computed. Futsal W2 D1 L0 and
   goal-difference tie-break are measured from an official table the friend shared; basketball and
   volleyball W2 L1 are an assumption, stated under every table.
-- Season 2026-27 starts 2026-11-14: the parser's notion of a *played* match (state names, `Cerrado`,
-  `IdEquipoGanador`, a non-zero score) was written before any real result existed. After the first
-  weekend, check Diagnostics → «Match states seen» and adjust `MatchStatus.of` / `Match.hasResult`.
+- Match states measured on the first matchday (2026-11-14, rain; fixtures `j1_*.json`): 0 «Pendiente de
+  Jugar»; 6 «No Celebrado/Incompleto» = rain-offs, score **null**; 10 «Disputado con Incidencias», score
+  null until ruled; 11 «Disputado sin Incidencias», score set, winner set (0 on a draw), `Cerrado` still
+  false; 12 «Desprogramado» (time back to 00:00). Rescheduled matches keep their jornada, with a new
+  `FechaHora` and `CambioAdministrador=true` (or an accepted request, state 6). A null score is no result
+  (`Match.scoreKnown`); the grouped calendar sends no score fields at all.
 - **Politeness**: never ask faster than the data changes (`RefreshPolicy`: 10 min with the app open
   on match weekends, 2 h otherwise; background 50 min / 5 h, nothing at night; a full pass per group
   once a day). Never parallelise requests to the site.
+- **Pre-match checks** (owner, 2026-11-14: rain-offs are announced at the last minute): from 4 h before a
+  followed child's match (known time, still on) until kick-off, that child's group only, every ~15 min
+  (`PreMatchPolicy`). `work/PreMatch`: one **exact** `setExactAndAllowWhileIdle` alarm (`USE_EXACT_ALARM`;
+  an inexact one is held to 2/hour in the "frequent" standby bucket, measured) → expedited one-off
+  `SyncWorker` (Android 12+) in `SyncMode.PRE_MATCH`; re-armed with the reminder. Off when change
+  notifications are off. Diagnostics → «Pre-match checks». Verified on the AVD in deep Doze.
 
 ## Reliability rules (two reviews, 2026-11-09)
 
@@ -122,7 +133,7 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
 - **When adding code**: every background entry point logs start and outcome; every branch that decides
   *not* to do something the user expects logs why, with its inputs (`key=value`, ids as numbers or
   8-char prefixes); every swallowed exception is `DiagLog.w(tag, "what failed", e)`. Tags in use:
-  `App`, `Source`, `Repo`, `Store`, `SyncWorker`, `Notify`, `Reminder`, `Kids`, `UI`, `Update`.
+  `App`, `Source`, `Repo`, `Store`, `SyncWorker`, `Notify`, `Reminder`, `PreMatch`, `Kids`, `UI`, `Update`.
 - **Never log** children's names, school/team names, venues, URLs with query strings.
 
 ### Reading a pasted diagnostics report

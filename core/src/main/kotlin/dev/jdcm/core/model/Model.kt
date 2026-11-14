@@ -91,7 +91,10 @@ data class Venue(
 /**
  * The status a match is in, as far as the app needs to tell them apart. The site only publishes
  * the catalogue of the states a change request can lead to (0, 1, 6, 12); the rest are read from
- * the state's name and the result fields — see [MatchStatus.of].
+ * the state's name and the result fields — see [MatchStatus.of]. Seen on the first matchday
+ * (2026-11-14, a rainy one): 0 «Pendiente de Jugar», 6 «No Celebrado/Incompleto» (rain-offs,
+ * score null), 10 «Disputado con Incidencias» (score null until ruled), 11 «Disputado sin
+ * Incidencias» (score set, `Cerrado` still false), 12 «Desprogramado».
  */
 enum class MatchStatus {
     SCHEDULED,
@@ -103,7 +106,7 @@ enum class MatchStatus {
 
     companion object {
         /** Ids from the site's own catalogue (`estadosPartidosSolicitudes`, measured 2026-11-09). */
-        private val BY_ID = mapOf(0 to SCHEDULED, 1 to POSTPONED, 6 to NOT_HELD, 12 to UNSCHEDULED)
+        private val BY_ID = mapOf(0 to SCHEDULED, 1 to POSTPONED, 6 to NOT_HELD, 10 to PLAYED, 11 to PLAYED, 12 to UNSCHEDULED)
 
         fun of(id: Int, name: String): MatchStatus {
             val n = name.lowercase()
@@ -137,6 +140,11 @@ data class Match(
     val statusName: String = "",
     val homeScore: Int = 0,
     val awayScore: Int = 0,
+    /**
+     * The site wrote both scores. It sends null (not 0) for a match not held or played "with
+     * incidents" whose result is pending: such a 0-0 is no result. Grouped calendars omit them.
+     */
+    val scoreKnown: Boolean = true,
     val winnerId: Int = 0,
     /** Partial results (quarters, sets) as the site writes them, empty ones dropped. */
     val partials: List<String> = emptyList(),
@@ -161,14 +169,18 @@ data class Match(
         else -> null
     }
 
+    /** Postponed, taken off the calendar or not held: nobody turns up for it. */
+    val isCancelled: Boolean
+        get() = status == MatchStatus.POSTPONED || status == MatchStatus.UNSCHEDULED || status == MatchStatus.NOT_HELD
+
     /**
      * Whether the score is a real, published result. A match the site still calls "pending"
-     * with 0-0 is not one; a closed one, one with a winner, a score, or a played state is —
-     * unless it was postponed or taken off the calendar.
+     * with 0-0 is not one, nor one whose score the site left empty (null); a closed one, one with
+     * a winner, a score, or a played state is — unless it was postponed or taken off the calendar.
      */
     val hasResult: Boolean
         get() {
-            if (isBye) return false
+            if (isBye || !scoreKnown) return false
             return when (status) {
                 MatchStatus.POSTPONED, MatchStatus.UNSCHEDULED -> false
                 MatchStatus.PLAYED -> true

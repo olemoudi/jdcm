@@ -44,7 +44,7 @@ class Format(private val context: Context) {
         MatchStatus.POSTPONED -> context.getString(R.string.status_postponed)
         MatchStatus.UNSCHEDULED -> context.getString(R.string.status_unscheduled)
         MatchStatus.NOT_HELD -> context.getString(R.string.status_not_held)
-        MatchStatus.PLAYED -> context.getString(R.string.status_final)
+        MatchStatus.PLAYED -> context.getString(if (m.hasResult) R.string.status_final else R.string.status_no_score)
         else -> if (m.hasResult) context.getString(R.string.status_final) else null
     }
 

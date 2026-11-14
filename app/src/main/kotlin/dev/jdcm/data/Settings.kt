@@ -82,6 +82,16 @@ class Settings(context: Context) {
         get() = d.getInt("stripLegendShows", 0)
         set(v) = d.edit { putInt("stripLegendShows", v) }
 
+    /** When the pre-match alarm last fired: the next check is due a quarter of an hour after it. */
+    var preMatchLastCheckMs: Long
+        get() = d.getLong("preMatchLastCheck", 0)
+        set(v) = d.edit { putLong("preMatchLastCheck", v) }
+
+    /** When the pre-match alarm is set to go off (0 = none), for the diagnostic report. */
+    var preMatchAlarmAtMs: Long
+        get() = d.getLong("preMatchAlarmAt", 0)
+        set(v) = d.edit { putLong("preMatchAlarmAt", v) }
+
     /** Home's install-permission reminder stays hidden until this time ("Más tarde"). */
     var installBannerSnoozedUntil: Long
         get() = d.getLong("installBannerSnoozedUntil", 0)

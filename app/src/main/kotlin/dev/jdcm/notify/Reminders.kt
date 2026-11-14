@@ -13,6 +13,7 @@ import dev.jdcm.core.model.MatchStatus
 import dev.jdcm.core.schedule.Schedule
 import dev.jdcm.data.Kid
 import dev.jdcm.diag.DiagLog
+import dev.jdcm.work.PreMatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,9 +41,7 @@ object Reminders {
     ): Pair<LocalDateTime, List<Pair<Kid, Match>>>? {
         val candidates = kids.mapNotNull { kid ->
             val s = snapshots[kid.groupId] ?: return@mapNotNull null
-            val m = Schedule.upcoming(s, kid.teamId, now)
-                .firstOrNull { it.status != MatchStatus.UNSCHEDULED && it.status != MatchStatus.POSTPONED && it.day != null }
-                ?: return@mapNotNull null
+            val m = Schedule.upcoming(s, kid.teamId, now).firstOrNull { it.isOn && it.day != null } ?: return@mapNotNull null
             if (key(kid, m) in reminded) return@mapNotNull null
             val at = m.day!!.minusDays(1).atTime(hour, 0)
             // Too late for the eve (the time was set tonight, or the app was just installed): no reminder.
@@ -56,10 +55,17 @@ object Reminders {
 
     fun key(kid: Kid, m: Match) = "${kid.id.take(8)}:${m.id}:${m.day}"
 
+    /** Both of the app's alarms: this reminder and the pre-match checks ([PreMatch]). */
     fun rearm(context: Context) {
         val app = context.applicationContext as JdcmApp
-        CoroutineScope(Dispatchers.IO).launch { runCatching { arm(app) }.onFailure { DiagLog.e(TAG, "rearm failed", it) } }
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { arm(app) }.onFailure { DiagLog.e(TAG, "rearm failed", it) }
+            runCatching { PreMatch.arm(app) }.onFailure { DiagLog.e("PreMatch", "rearm failed", it) }
+        }
     }
+
+    /** Not cancelled, not played: a match the child turns up to (a rained-off one gets no reminder). */
+    private val Match.isOn: Boolean get() = !isCancelled && status != MatchStatus.PLAYED
 
     suspend fun arm(app: JdcmApp) {
         val c = app.container
@@ -96,9 +102,7 @@ object Reminders {
         if (s.notifyReminder) {
             for (kid in kids) {
                 val snap = c.repository.snapshots.value[kid.groupId] ?: continue
-                val m = Schedule.upcoming(snap, kid.teamId, now)
-                    .firstOrNull { it.status != MatchStatus.UNSCHEDULED && it.status != MatchStatus.POSTPONED && it.day != null }
-                    ?: continue
+                val m = Schedule.upcoming(snap, kid.teamId, now).firstOrNull { it.isOn && it.day != null } ?: continue
                 // Due: the match is tomorrow, or later today when the alarm was late past midnight.
                 if (m.day != tomorrow && m.day != now.toLocalDate()) continue
                 if (key(kid, m) in reminded) continue
@@ -108,6 +112,8 @@ object Reminders {
             c.settings.remindedMatchIds = reminded
         }
         arm(app)
+        // The evening before is a good moment to set tomorrow's pre-match checks too.
+        runCatching { PreMatch.arm(app) }.onFailure { DiagLog.e("PreMatch", "arm failed", it) }
     }
 
     private fun pending(context: Context): PendingIntent = PendingIntent.getBroadcast(
