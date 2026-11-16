@@ -1,0 +1,71 @@
+import { test, expect, addKid, dismissInstallBanner, LUCIA, PABLO } from './fixtures'
+
+// The key screens at iPhone size, for review (pwa/e2e/screenshots/, not committed).
+// Run alone: npx playwright test screenshots --project=iphone-webkit
+const shot = (name: string) => `e2e/screenshots/${name}.png`
+
+test('screenshots of the key screens', async ({ page }, info) => {
+  test.skip(info.project.name !== 'iphone-webkit', 'iPhone only')
+  await page.goto('/jdcm/')
+  await expect(page.getByTestId('install-banner')).toBeVisible()
+  await page.screenshot({ path: shot('01-first-visit-install-banner') })
+
+  await dismissInstallBanner(page)
+  await page.goto('/jdcm/#/hijo/nuevo')
+  await page.getByLabel('Nombre').fill('Lucía')
+  await page.screenshot({ path: shot('02-add-child-name') })
+  await page.getByRole('button', { name: 'Siguiente' }).click()
+  await page.getByRole('button', { name: 'Fútbol sala' }).click()
+  await page.screenshot({ path: shot('03-add-child-age-group') })
+  await page.getByRole('button', { name: /^Alevín mixto/ }).click()
+  await page.getByLabel('Busca el colegio').fill('vedruna')
+  await page.screenshot({ path: shot('04-add-child-team-search') })
+  await page.getByRole('button', { name: /FEC SANTA JOAQUINA DE VEDRUNA/ }).first().click()
+  await addKid(page, PABLO)
+  await page.goto('/jdcm/')
+  await expect(page.locator('section[data-testid^="kid-"]').first()).toBeVisible()
+  await page.screenshot({ path: shot('05-home-two-children') })
+  await page.screenshot({ path: shot('06-home-full'), fullPage: true })
+
+  await page.locator('section[data-testid^="kid-"]').first().locator('[data-match-id] button').first().click()
+  await expect(page.getByTestId('match-sheet')).toBeVisible()
+  await page.waitForTimeout(400)
+  await page.screenshot({ path: shot('07-match-sheet') })
+  await page.keyboard.press('Escape')
+
+  await page.goto('/jdcm/#/grupo/177/calendario')
+  await expect(page.locator('[data-match-id]').first()).toBeVisible()
+  await page.screenshot({ path: shot('08-group-calendar') })
+  await page.goto('/jdcm/#/grupo/177/clasificacion')
+  await expect(page.getByTestId('standings')).toBeVisible()
+  await page.screenshot({ path: shot('09-group-standings') })
+  await page.goto('/jdcm/#/tablas')
+  await expect(page.getByTestId('standings-assumed')).toBeVisible()
+  await page.screenshot({ path: shot('10-standings-tab-basketball-note'), fullPage: true })
+  await page.goto('/jdcm/#/equipo/177/1194')
+  await expect(page.locator('[data-match-id]').first()).toBeVisible()
+  await page.screenshot({ path: shot('11-team') })
+  await page.goto('/jdcm/#/ajustes')
+  await page.screenshot({ path: shot('12-settings'), fullPage: true })
+
+  // The update prompt, then light mode, then the alpha channel.
+  await page.evaluate(() => localStorage.setItem('jdcm:beta:theme', 'light'))
+  await page.goto('/jdcm/')
+  await expect(page.locator('[data-match-id]').first()).toBeVisible()
+  await page.screenshot({ path: shot('13-home-light') })
+  await page.goto('/jdcm/alpha/')
+  await page.screenshot({ path: shot('14-alpha-first-visit') })
+  await page.goto('/jdcm/#/hijo/nuevo')
+  await addKid(page, { ...LUCIA, name: 'Marta', search: 'pilar', team: /NUESTRA SEÑORA DEL PILAR "A"/ })
+  await page.screenshot({ path: shot('15-group-not-followed') })
+})
+
+test('screenshot of the update dialog', async ({ page, deploy }, info) => {
+  test.skip(info.project.name !== 'iphone-webkit', 'iPhone only')
+  await page.goto('/jdcm/#/ajustes')
+  await page.waitForFunction(() => !!navigator.serviceWorker?.controller, null, { timeout: 20_000 })
+  await deploy('beta', 'b')
+  await page.getByTestId('check-updates').click()
+  await expect(page.getByTestId('update-dialog')).toBeVisible({ timeout: 20_000 })
+  await page.screenshot({ path: shot('16-update-dialog') })
+})

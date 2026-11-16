@@ -1,0 +1,142 @@
+@import "tailwindcss";
+
+/*
+ * The Android app's look (ui/theme/Theme.kt): Marca's results screen. Near-black surfaces separated
+ * by thin lines, one warm orange for "selected / now", a soft blue for links, big tabular scores.
+ * Light mode keeps the structure for daylight at the pitch. Dark is the default.
+ */
+:root,
+[data-theme='dark'] {
+  --bg: #111214;
+  --card: #16171a;
+  --raised: #212226;
+  --raised-2: #2a2b30;
+  --text: #ededee;
+  --text-2: #a7aab0;
+  --line: #2e2f34;
+  --primary: #f2643b;
+  --on-primary: #ffffff;
+  --primary-soft: #3a1f16;
+  --link: #8ab4f8;
+  --win: #5bc27a;
+  --draw: #a7aab0;
+  --loss: #ff6b6b;
+  --modified: #ffa43a;
+  --danger: #ff6b6b;
+  --highlight: #1f2024;
+  --scrim: rgb(0 0 0 / 0.6);
+  /* The status bar is translucent and its text white: under it the top strip stays dark. */
+  --statusbar: #111214;
+}
+
+[data-theme='light'] {
+  --bg: #f4f4f5;
+  --card: #ffffff;
+  --raised: #f0f0f2;
+  --raised-2: #e6e6e9;
+  --text: #17181a;
+  --text-2: #5d6066;
+  --line: #e0e1e4;
+  --primary: #d9481c;
+  --on-primary: #ffffff;
+  --primary-soft: #ffe3d8;
+  --link: #1a63c9;
+  --win: #1e8e45;
+  --draw: #6b6e74;
+  --loss: #c62828;
+  --modified: #b85c00;
+  --danger: #c62828;
+  --highlight: #f7f0ec;
+  --scrim: rgb(0 0 0 / 0.45);
+  --statusbar: #17181a;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-card: var(--card);
+  --color-raised: var(--raised);
+  --color-raised-2: var(--raised-2);
+  --color-text: var(--text);
+  --color-text-2: var(--text-2);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-soft: var(--primary-soft);
+  --color-link: var(--link);
+  --color-win: var(--win);
+  --color-draw: var(--draw);
+  --color-loss: var(--loss);
+  --color-modified: var(--modified);
+  --color-danger: var(--danger);
+  --color-highlight: var(--highlight);
+  --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  /* No rubber-band reveal of an empty page behind the app. */
+  overscroll-behavior-y: none;
+}
+
+/* Scores and clock times line up in columns. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 16 px at least: iOS zooms into any smaller input on focus. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+button {
+  touch-action: manipulation;
+  cursor: pointer;
+}
+
+/* Safe areas (notch, Dynamic Island, home indicator): the app pads itself (viewport-fit=cover). */
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.px-safe {
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.statusbar-strip {
+  height: env(safe-area-inset-top, 0px);
+  background: var(--statusbar);
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+.sheet-enter {
+  animation: sheet-up 0.22s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-enter { animation: none; }
+}
