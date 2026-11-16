@@ -142,28 +142,48 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
 - The updater is the one part that cannot be fixed remotely: any change to `update/` needs its JVM tests
   green and a real-phone check that the NEXT release still installs.
 
-## PWA for iPhone families (`pwa/`, `pump/`)
+## PWA for iPhone families (`pwa/`)
 
-- **Why static JSON**: the site sends no CORS headers, so a browser cannot read it. The scheduled
-  workflow `.github/workflows/pwa-data.yml` runs `:pump` (reuses `:core`: parser, merge, RefreshPolicy,
-  Standings) for the groups in `pwa/groups.json` and force-pushes ONE commit to the orphan branch `data`
-  (`index.json`, `catalog.json`, `groups/<id>.json` with standings, `state/<id>.json` = the pump's memory).
-  The PWA reads it from raw.githubusercontent.com (ACAO *, 5-min CDN cache). There is no grouped
-  results endpoint (checked 2026-11-16: the results page calls per-group endpoints only), so only listed
-  groups get results; `catalog.json` (3 grouped-calendar requests a day) lists every team for "add child".
-- **Pace (owner, 2026-11-16)**: cron `7 6-18/3 * * *` (5 runs/day), a night guard (no fetch outside
-  07–21 Madrid on scheduled runs), hot rounds refreshed every run. Pump `Limits`: ≤ 60 requests and
-  4 min per run, 1.5 s apart, one retry, UA `JDCM-PWA-data/1`. A group costs ~1 request per run.
-- **Adding a group**: paste the line from the PWA's request (issue or message) into `pwa/groups.json`.
+- **The site filters by IP** (measured 2026-11-16): GitHub's runners and 16 of 17 test servers in
+  13 countries time out (a Madrid datacenter answered, a Barcelona one did not); Spanish home
+  connections answer in 0.3 s. It also sends no CORS headers. So the data comes from home:
+  `pwa/pi/jdcm-fetch.sh`, a plain bash script (curl, jq, git) on the owner's Raspberry Pi 3 B+
+  (1 GB, Raspberry Pi OS 32/64-bit), run by a systemd user timer at 07:07, 10:07, 13:07, 16:07, 19:07
+  Madrid (linger on, night guard 07–21 in the script too). Install: `pwa/pi/install.sh`; owner's guide
+  in Spanish: `pwa/pi/INSTALL.md`.
+- **No self-hosted runner**: on a public repo a fork's PR could run code on the owner's home machine,
+  and a job token for jdcm can push tags, and tags release signed APKs.
+- **jdcm-data**: the script force-pushes ONE commit per run to the public repo `olemoudi/jdcm-data`
+  (`main`) with a deploy key that can write there only (`~/.config/jdcm-fetch/deploy_key`;
+  `JDCM_PUMP_SSH=default` uses your own ssh instead, e.g. `ssk run olemoudi -- env JDCM_PUMP_SSH=default
+  pwa/pi/jdcm-fetch.sh --now` from this PC). Layout `v1/`: `groups/<id>/r<round>.json` (the site's
+  round object as sent, its matches), `groups/<id>/meta.json` (round list, fetchedAt, count,
+  shrinkSeen, lastError, fullDay), `groups/<id>/all.json` (both, what the PWA downloads),
+  `catalog/<sport>.json` (grouped calendar trimmed to teams, merged with the held one), `index.json`.
+- **Politeness** (the app's rules): one request at a time ≥ 1.5 s apart, UA `JDCM-PWA-fetch/1`, ≤ 60
+  requests and ≤ 4 min a run; non-JSON is asked once more; 5xx/429/timeouts and two odd answers in a
+  row stop the run. Per group: `IdJornada=0` (brings previous and next), rounds with a match in −3..+6
+  days (replays keep their old round), once a day the rest; once a day 3 grouped calendars. A round
+  is stored only if it is the round and group asked and holds ≥ half the held matches, or the same
+  smaller count came in an earlier run. 2 groups ≈ 2 requests a run, ≈ 14 for the first of the day.
+  Tests: `pwa/pi/test/test.sh` (a mock of the site built from the fixtures, a local bare repo).
+- **Groups**: `pwa/groups.json` on jdcm `main`, read by the script each run. The PWA's "add a child"
+  lists every team (the catalogue) and offers a prefilled request for an unfollowed group.
+- **Parsing and standings exist twice**: Kotlin `core/` for Android, `pwa/src/core/` (TypeScript) for
+  the PWA: SiteParser, match semantics, the merge rules that apply to stored rounds, Standings +
+  PointsRule, Schedule.matchdayOf. They are kept in step by the shared fixtures:
+  `pwa/src/__tests__/core/` reads `core/src/test/resources/fixtures/*.json` and mirrors SiteParserTest,
+  StandingsTest, FirstMatchdayTest and the applicable merge/schedule cases. Change one, change both.
 - **PWA**: Vite + React + Tailwind + vite-plugin-pwa (GTD25's stack and update model, see
-  `~/vibedev/gtd25/PWA_UPDATE_PROTOCOL.md`). Two channels by path on makensi.es (website repo
+  `~/vibedev/gtd25/PWA_UPDATE_PROTOCOL.md`), reads `https://raw.githubusercontent.com/olemoudi/jdcm-data/main/v1/`
+  and flags data older than 12.5 h (the Pi may be off). Two channels by path on makensi.es (website repo
   `olemoudi/olemoudi.github.io`): `/jdcm/` = beta, `/jdcm/alpha/` = alpha. Each build has its own
   manifest id/scope, worker, cache prefix (`jdcm-<channel>-`) and storage keys (`jdcm:<channel>:`); the
   beta worker ignores `/jdcm/alpha/`. Never use Workbox's `cleanupOutdatedCaches()` (it would delete the
   alpha's precache). Publish: `pwa/scripts/publish.sh ~/vibedev/olemoudi.github.io beta|alpha`, then
   commit and `ssk run olemoudi -- git push` in the website checkout.
 - **Tests**: `cd pwa && npx vitest run`; `npx playwright test` (iPhone WebKit + Android Chromium, builds
-  both channels twice and serves them nested like the real site). `./gradlew :pump:test`.
+  both channels twice and serves them nested like the real site); `pwa/pi/test/test.sh`.
 
 ## Diagnostics (always on)
 
