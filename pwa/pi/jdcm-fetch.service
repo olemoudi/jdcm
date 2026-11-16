@@ -1,0 +1,11 @@
+[Unit]
+Description=JDCM: read the competition's site and publish it for the web app
+Documentation=https://github.com/olemoudi/jdcm/blob/main/pwa/pi/INSTALL.md
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/share/jdcm-fetch/jdcm-fetch.sh
+# A run takes a minute at most (60 requests 1.5 s apart, a 4-minute budget).
+TimeoutStartSec=10min
+Nice=10
+IOSchedulingClass=idle

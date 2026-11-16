@@ -1,0 +1,12 @@
+[Unit]
+Description=JDCM fetch at 07:07, 10:07, 13:07, 16:07 and 19:07 (Madrid time)
+
+[Timer]
+# Madrid time whatever the device's own zone; never at night (the script checks it too).
+OnCalendar=*-*-* 07,10,13,16,19:07:00 Europe/Madrid
+RandomizedDelaySec=120
+# A run missed while the device was off happens when it comes back (unless it is night by then).
+Persistent=true
+
+[Install]
+WantedBy=timers.target
