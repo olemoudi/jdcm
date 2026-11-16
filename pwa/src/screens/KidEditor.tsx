@@ -7,9 +7,8 @@ import { currentEnv, installMode } from '../lib/platform'
 import { goBack, navigate } from '../lib/router'
 import { Check, ChevronRight, Search, SportIcon } from '../components/Icons'
 import { Crest, FlatCard, Hairline, PrimaryButton, ScreenHeader, SecondaryButton } from '../components/ui'
-import { groupRequest, RequestButtons } from './shared'
 
-type Step = 'name' | 'sport' | 'competition' | 'category' | 'team' | 'pending'
+type Step = 'name' | 'sport' | 'competition' | 'category' | 'team'
 
 interface Pick {
   sportId: number
@@ -24,13 +23,13 @@ const SPORT_ORDER = [2, 1, 3] // futsal, basketball, volleyball: the app's order
 
 /**
  * Add or edit a child: name and colour, then sport → age group → (category) → team, searched by
- * school across every group of the category (the catalogue the home fetcher publishes). A team whose
- * group the fetcher does not follow yet can still be saved, with a way to ask for it.
+ * school across every group of the category (the catalogue the home fetcher publishes: every group
+ * of the competition is covered).
  */
 export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?: number; teamId?: number }) {
   const fmt = useFmt()
   const { kids, upsert, remove } = useKids()
-  const { catalog, catalogState, loadCatalog, groups, index } = useData()
+  const { catalog, catalogState, loadCatalog, groups } = useData()
   const editing = kids.find((k) => k.id === kidId)
   const [step, setStep] = useState<Step>('name')
   const [name, setName] = useState(editing?.name ?? '')
@@ -55,24 +54,13 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
   const sport: CatalogSport | undefined = pick ? catalog[pick.sportId] : undefined
   const ios = installMode(currentEnv(false))
   const steps: Step[] = ['name', 'sport', 'competition', 'team']
-  const stepNo = Math.min(steps.length, steps.indexOf(step === 'category' ? 'competition' : step === 'pending' ? 'team' : step) + 1)
+  const stepNo = Math.min(steps.length, steps.indexOf(step === 'category' ? 'competition' : step) + 1)
 
-  const followed = (gid: number) => !index || index.groups.some((g) => g.groupId === gid)
 
   const save = (base: Omit<Kid, 'id' | 'name' | 'color'>) => {
     const kid: Kid = { ...base, id: editing?.id ?? newKidId(), name: name.trim(), color }
     upsert(kid)
     navigate({ name: 'home' }, true)
-  }
-
-  const saveFromPick = () => {
-    if (!pick?.team || !pick.competition || !pick.category || !pick.groupId) return
-    save({
-      sportId: pick.sportId, sportKind: sportKindOfId(pick.sportId),
-      competitionId: pick.competition.id, competitionName: pick.competition.name,
-      categoryId: pick.category.id, categoryName: pick.category.name,
-      groupId: pick.groupId, groupName: pick.groupName ?? '', teamId: pick.team.id, teamName: pick.team.name, crest: pick.team.crest,
-    })
   }
 
   const afterName = () => {
@@ -258,23 +246,19 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
               {i > 0 && <Hairline inset={56} />}
               <button type="button" className="flex min-h-14 w-full items-center gap-3 px-4 py-2 text-left active:bg-raised"
                 onClick={() => {
-                  const next = { ...pick!, team, groupId: group.id, groupName: group.name }
-                  setPick(next)
-                  if (followed(group.id)) {
-                    if (!next.competition || !next.category) return
-                    save({
-                      sportId: next.sportId, sportKind: sportKindOfId(next.sportId),
-                      competitionId: next.competition.id, competitionName: next.competition.name,
-                      categoryId: next.category.id, categoryName: next.category.name,
-                      groupId: group.id, groupName: group.name, teamId: team.id, teamName: team.name, crest: team.crest,
-                    })
-                  } else setStep('pending')
+                  if (!pick?.competition || !pick.category) return
+                  save({
+                    sportId: pick.sportId, sportKind: sportKindOfId(pick.sportId),
+                    competitionId: pick.competition.id, competitionName: pick.competition.name,
+                    categoryId: pick.category.id, categoryName: pick.category.name,
+                    groupId: group.id, groupName: group.name, teamId: team.id, teamName: team.name, crest: team.crest,
+                  })
                 }}>
                 <Crest team={team} size={30} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[15px]">{team.name}</span>
                   <span className="block text-xs text-text-2">
-                    {group.name}{followed(group.id) ? '' : ` · ${fmt.t('group_not_followed')}`}
+                    {group.name}
                   </span>
                 </span>
               </button>
@@ -285,25 +269,7 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
     )
   }
 
-  // step === 'pending': the group is not followed by the fetcher yet.
-  const req = pick?.team && pick.competition && pick.category && pick.groupId
-    ? groupRequest({
-        sportId: pick.sportId, sportKind: sportKindOfId(pick.sportId), competitionId: pick.competition.id, competitionName: pick.competition.name,
-        categoryId: pick.category.id, categoryName: pick.category.name, groupId: pick.groupId, groupName: pick.groupName ?? '', teamName: pick.team.name,
-      }, fmt)
-    : null
-  return (
-    <div className="pb-24">
-      {header}
-      <div className="px-4 pt-4" data-testid="not-followed">
-        <h2 className="text-xl font-bold">{fmt.t('not_followed_title')}</h2>
-        <p className="mt-2 text-[15px] text-text-2">{fmt.t('not_followed_text')}</p>
-        {req && <p className="mt-3 text-sm font-semibold">{req.label} · {pick?.team?.name}</p>}
-        {req && <RequestButtons req={req} />}
-        <SecondaryButton className="mt-6 w-full" onClick={saveFromPick}>{fmt.t('save_anyway', name.trim())}</SecondaryButton>
-      </div>
-    </div>
-  )
+  return null
 }
 
 function BottomAction({ children }: { children: ReactNode }) {

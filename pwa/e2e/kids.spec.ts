@@ -56,15 +56,15 @@ test.describe('children and their matches', () => {
     await expect(page.getByText('No celebrado').first()).toBeVisible() // the rain-offs of 14 November
   })
 
-  test('a team whose group is not followed yet can be saved, with a way to ask for it', async ({ page }) => {
+  test('any team of any group can be followed: every group is covered', async ({ page }) => {
     await page.goto('/jdcm/')
     await dismissInstallBanner(page)
     await addKid(page, { ...LUCIA, name: 'Marta', search: 'pilar', team: /NUESTRA SEÑORA DEL PILAR "A"/ })
-    const pending = page.getByTestId('not-followed')
-    await expect(pending).toContainText('Este grupo aún no está en la web app')
-    await expect(pending.getByRole('link', { name: /Pedirlo en GitHub/ })).toHaveAttribute('href', /github\.com\/olemoudi\/jdcm\/issues\/new\?title=.*groupId%22%3A180/)
-    await pending.getByRole('button', { name: 'Guardar a Marta' }).click()
-    await expect(page.getByTestId('group-pending')).toContainText('Pide que añadan el de Marta')
+    const section = page.locator('section[data-testid^="kid-"]')
+    await expect(section).toContainText('Marta')
+    await expect(section).toContainText('Grupo 4')
+    await expect(section.locator('[data-match-id]').first()).toContainText('NUESTRA SEÑORA DEL PILAR "A"')
+    await expect(page.getByText('GitHub')).toHaveCount(0)
   })
 
   test('data older than 12.5 hours is flagged plainly (the fetcher at home may be off)', async ({ page }) => {

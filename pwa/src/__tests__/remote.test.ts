@@ -30,11 +30,11 @@ describe('stale-while-revalidate for the data', () => {
     const body = JSON.stringify(realJson('v1/index.json'))
     globalThis.fetch = vi.fn(async () => new Response(body)) as unknown as typeof fetch
     const fresh = await readFresh('v1/index.json', parseIndex)
-    expect(fresh.groups).toHaveLength(2)
+    expect(fresh.groups).toHaveLength(109)
     expect([...caches.stores.keys()]).toEqual([DATA_CACHE])
     expect(DATA_CACHE).toBe('jdcm-beta-data')
     __resetRemoteMemory()
-    expect((await readCached('v1/index.json', parseIndex))!.groups).toHaveLength(2)
+    expect((await readCached('v1/index.json', parseIndex))!.groups).toHaveLength(109)
   })
 
   it('never caches a broken answer over a good one', async () => {

@@ -1,4 +1,4 @@
-import { buildGroup, combineRounds, unbelievedResult } from '../../core/group'
+import { buildGroup, combineRounds, mergeSources, toView, unbelievedResult } from '../../core/group'
 import { hasResult, status } from '../../core/model'
 import { roundPageFrom, unwrap } from '../../core/parser'
 import { matchdayOf, weekendOf } from '../../core/schedule'
@@ -90,5 +90,53 @@ describe('Schedule (port)', () => {
     expect(matchdayOf(replay)).toBe('2026-12-12')
     const sunday = { ...match(2, team(1), team(2)), start: '2026-11-15T11:00:00' }
     expect(matchdayOf(sunday)).toBe('2026-11-14')
+  })
+})
+
+describe('the grouped calendar and the group’s own pages together', () => {
+  const page = (state: object, at: number) => ({ round: roundObj(102, 2, '2026-11-21T00:00:00', [raw(1, 7, state)]), fetchedAt: at })
+  const sched = (state: object, at: number) => ({ at, m: raw(1, 7, state) })
+  const PENDING = { IdEstadoPartido: 0, EstadoPartido: 'Pendiente de Jugar', ResultadoEquipoLocal: 0, ResultadoEquipoVisitante: 0 }
+  const PLAYED = { IdEstadoPartido: 11, EstadoPartido: 'Disputado sin Incidencias' }
+
+  it('takes the state from the grouped calendar when it is newer, the score only from the page', () => {
+    const [m] = mergeSources(7, [page({ ...PLAYED, ResultadoEquipoLocal: 3, ResultadoEquipoVisitante: 1, IdEquipoGanador: 10 }, 1)],
+      [sched({ ...PLAYED, FechaHora: '2026-11-21T11:00:00' }, 2)], '2026-11-22')
+    expect(m.start).toBe('2026-11-21T11:00:00')
+    expect(hasResult(m)).toBe(true)
+    expect([m.homeScore, m.awayScore]).toEqual([3, 1])
+  })
+
+  it('a grouped "played" without a score is «Resultado pendiente», not the page’s placeholder 0-0', () => {
+    const [m] = mergeSources(7, [page(PENDING, 1)], [sched(PLAYED, 2)], '2026-11-22')
+    expect(status(m)).toBe('PLAYED')
+    expect(hasResult(m)).toBe(false)
+    const v = toView(m)
+    expect(v).toMatchObject({ status: 'PLAYED', hasResult: false, homeScore: null })
+  })
+
+  it('a rain-off the grouped calendar saw after the page was read wins', () => {
+    const [m] = mergeSources(7, [page(PENDING, 1)], [sched({ IdEstadoPartido: 6, EstadoPartido: 'No Celebrado/Incompleto' }, 2)], '2026-11-22')
+    expect(status(m)).toBe('NOT_HELD')
+  })
+
+  it('an older grouped state does not undo a newer page', () => {
+    const [m] = mergeSources(7, [page({ ...PLAYED, ResultadoEquipoLocal: 2, ResultadoEquipoVisitante: 2 }, 5)], [sched(PENDING, 2)], '2026-11-22')
+    expect(status(m)).toBe('PLAYED')
+    expect(hasResult(m)).toBe(true)
+  })
+
+  it('a match only the grouped calendar knows has no score, and another group’s match is dropped', () => {
+    const ms = mergeSources(7, [], [sched(PLAYED, 1), { at: 1, m: raw(9, 8) }], '2026-11-22')
+    expect(ms.map((m) => m.id)).toEqual([1])
+    expect(ms[0].scoreKnown).toBe(false)
+  })
+
+  it('a group read only through the grouped calendar still has its rounds, matches and table', () => {
+    const g = buildGroup({ v: 1, info: { ref: { groupId: 7, sportId: 2, competitionId: 1, categoryId: 1 }, group: { name: 'Grupo 1' } },
+      meta: {}, rounds: {}, sched: [sched({ ...PENDING, IdJornada: 101, NumeroJornada: 1 }, 1)] }, '2026-11-17')!
+    expect(g.rounds).toEqual([{ id: 101, number: 1, date: '2026-11-21', fetchedAt: 0 }])
+    expect(g.matches).toHaveLength(1)
+    expect(g.standings.rows).toHaveLength(2)
   })
 })

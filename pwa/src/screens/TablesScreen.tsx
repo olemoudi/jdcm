@@ -5,13 +5,13 @@ import { navigate } from '../lib/router'
 import { StandingsTable } from '../components/StandingsTable'
 import { SportIcon } from '../components/Icons'
 import { FlatCard, PrimaryButton } from '../components/ui'
-import { FreshnessLine, GroupPending, StaleBanner } from './shared'
+import { FreshnessLine, StaleBanner } from './shared'
 
 /** Every child's group table, one under the other (the app's Clasificación tab). */
 export function TablesScreen() {
   const fmt = useFmt()
   const { kids } = useKids()
-  const { groups, index, state } = useData()
+  const { groups, state } = useData()
   const seen = new Set<number>()
   const list = kids.filter((k) => (seen.has(k.groupId) ? false : (seen.add(k.groupId), true)))
   return (
@@ -28,7 +28,6 @@ export function TablesScreen() {
       )}
       {list.map((k) => {
         const g = groups[k.groupId]
-        const followed = !index || index.groups.some((x) => x.groupId === k.groupId)
         const names = kids.filter((x) => x.groupId === k.groupId).map((x) => x.name).join(', ')
         return (
           <section key={k.groupId} className="mt-3">
@@ -42,7 +41,7 @@ export function TablesScreen() {
                 <span className="block truncate text-xs text-text-2">{Format.sentence(k.competitionName)} · {k.groupName}</span>
               </span>
             </button>
-            {!followed ? <GroupPending kid={k} /> : g ? (
+            {g ? (
               <>
                 <FlatCard>
                   <StandingsTable standings={g.standings} sport={g.sport} highlightTeamId={k.teamId} accent={kidColor(k.color)}

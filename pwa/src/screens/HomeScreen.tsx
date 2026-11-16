@@ -13,7 +13,7 @@ import { openDirections, useOpenMatch } from '../components/MatchSheet'
 import { KidPills, MatchdayStrip } from '../components/Strips'
 import { ChevronDown, ChevronUp, EventBusy, SportIcon } from '../components/Icons'
 import { FlatCard, Hairline, PrimaryButton } from '../components/ui'
-import { FreshnessLine, GroupPending, StaleBanner } from './shared'
+import { FreshnessLine, StaleBanner } from './shared'
 
 /** Home: the children's matchday, Marca-style (the app's HomeScreen). */
 export function HomeScreen() {
@@ -109,11 +109,10 @@ function StripLegend({ kids }: { kids: Kid[] }) {
 /** One child: their match of the matchday first, the rest of the group's after, the doors at the foot. */
 function KidSection({ kid, group, day }: { kid: Kid; group: GroupData | undefined; day: string | null }) {
   const fmt = useFmt()
-  const { index, state } = useData()
+  const { state } = useData()
   const openMatch = useOpenMatch()
   const [expanded, setExpanded] = useState(false)
   const accent = kidColor(kid.color)
-  const followed = !index || index.groups.some((g) => g.groupId === kid.groupId)
   const position = group?.standings.rows.find((r) => r.team.id === kid.teamId && r.played > 0)
   const title = `${Format.sentence(kid.competitionName)} · ${kid.groupName}`
 
@@ -137,9 +136,7 @@ function KidSection({ kid, group, day }: { kid: Kid; group: GroupData | undefine
         {position && <span className="tnum shrink-0 text-sm font-semibold text-text-2">{fmt.t('position_points', position.position, position.points)}</span>}
       </button>
 
-      {!followed ? (
-        <GroupPending kid={kid} />
-      ) : !group ? (
+      {!group ? (
         <FlatCard><p className="p-4 text-sm text-text-2">{state === 'loading' ? fmt.t('loading') : fmt.t('not_loaded')}</p></FlatCard>
       ) : (
         <>

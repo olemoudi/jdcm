@@ -63,7 +63,8 @@ test('screenshots of the key screens', async ({ page }, info) => {
   await page.clock.setFixedTime(NOW)
   await page.goto('/jdcm/#/hijo/nuevo')
   await addKid(page, { ...LUCIA, name: 'Marta', search: 'pilar', team: /NUESTRA SEÑORA DEL PILAR "A"/ })
-  await page.screenshot({ path: shot('15-group-not-followed') })
+  await expect(page.locator('section[data-testid^="kid-"]').first()).toBeVisible()
+  await page.screenshot({ path: shot('15-any-group') })
 })
 
 test('screenshot of the update dialog', async ({ page, deploy }, info) => {

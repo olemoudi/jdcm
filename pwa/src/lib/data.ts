@@ -1,5 +1,3 @@
-import { groupedRoundFrom } from '../core/parser'
-
 // What the screens read. The home fetcher (pwa/pi/jdcm-fetch.sh) publishes the site's own JSON to
 // olemoudi/jdcm-data; src/core (a port of the Kotlin core) turns it into these view types. Everything
 // from the network is read defensively: it may be half a file, an error page or a newer schema.
@@ -95,7 +93,7 @@ export interface DataIndex {
   groups: IndexGroup[]
 }
 
-export interface CatalogGroup { id: number; name: string; followed: boolean; teams: Team[] }
+export interface CatalogGroup { id: number; name: string; teams: Team[] }
 export interface CatalogCategory { id: number; name: string; groups: CatalogGroup[] }
 export interface CatalogCompetition { id: number; name: string; categories: CatalogCategory[] }
 export interface CatalogSport { id: number; kind: SportKind; competitions: CatalogCompetition[] }
@@ -135,35 +133,29 @@ export function parseIndex(v: unknown): DataIndex | null {
 }
 
 /**
- * `v1/catalog/<sportId>.json`: the site's grouped calendar of one round for the whole sport, trimmed
- * to the teams. Parsed with the core port (groupedRound), teams sorted by name, groups by number.
+ * `v1/catalog/<sportId>.json`: every competition, category and group of a sport with its teams, as
+ * the fetcher builds it from the grouped calendars. Read defensively; teams sorted by name, groups
+ * by number ("Grupo 10" after "Grupo 9").
  */
-export function buildCatalogSport(v: unknown, sportId: number, followed: Set<number>): CatalogSport | null {
-  if (!isObj(v) || num(v.v) < 1) return null
-  let rounds
-  try {
-    rounds = groupedRoundFrom(v.competitions)
-  } catch {
-    return null
-  }
+export function buildCatalogSport(v: unknown, sportId: number): CatalogSport | null {
+  if (!isObj(v) || num(v.v) < 1 || !Array.isArray(v.competitions)) return null
   const byName = (a: { name: string }, b: { name: string }) => collator.compare(a.name, b.name)
   const groupNo = (n: string) => Number(/\d+/.exec(n)?.[0] ?? Number.MAX_SAFE_INTEGER)
+  const list = (x: unknown) => (Array.isArray(x) ? x.filter(isObj).filter((o) => num(o.id) > 0) : [])
   return {
     id: sportId,
     kind: sportKindOfId(sportId),
-    competitions: rounds.filter((c) => c.competitionId > 0).map((c) => ({
-      id: c.competitionId,
-      name: c.competition,
-      categories: c.categories.filter((k) => k.categoryId > 0).map((k) => ({
-        id: k.categoryId,
-        name: k.name,
-        groups: k.groups.filter((g) => g.groupId > 0).map((g) => {
-          const seen = new Map<number, Team>()
-          for (const m of g.matches) {
-            for (const t of [m.home, m.away]) if (t && !seen.has(t.id)) seen.set(t.id, { id: t.id, name: t.name, crest: t.crestPath })
-          }
-          return { id: g.groupId, name: g.name, followed: followed.has(g.groupId), teams: [...seen.values()].sort(byName) }
-        }).sort((a, b) => groupNo(a.name) - groupNo(b.name) || a.name.localeCompare(b.name)),
+    competitions: list(v.competitions).map((c) => ({
+      id: num(c.id),
+      name: str(c.name),
+      categories: list(c.categories).map((k) => ({
+        id: num(k.id),
+        name: str(k.name),
+        groups: list(k.groups).map((g) => ({
+          id: num(g.id),
+          name: str(g.name),
+          teams: list(g.teams).map((t) => ({ id: num(t.id), name: str(t.name).trim() || `Equipo ${num(t.id)}`, crest: str(t.crest).trim() })).sort(byName),
+        })).sort((a, b) => groupNo(a.name) - groupNo(b.name) || a.name.localeCompare(b.name)),
       })).sort(byName),
     })).sort(byName),
   }

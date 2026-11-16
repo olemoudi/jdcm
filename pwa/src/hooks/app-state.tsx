@@ -140,8 +140,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [extra, setExtra] = useState<number[]>([])
   const [catalog, setCatalog] = useState<Record<number, CatalogSport>>({})
   const [catalogState, setCatalogState] = useState<Record<number, LoadState>>({})
-  const indexRef = useRef<DataIndex | null>(null)
-  indexRef.current = index
   const groupsRef = useRef(groups)
   groupsRef.current = groups
   const running = useRef<Promise<void> | null>(null)
@@ -180,9 +178,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setIndex(fresh)
         for (const id of wantedRef.current) {
           const entry = fresh.groups.find((g) => g.groupId === id)
-          if (!entry) continue // not followed by the fetcher (yet)
           const held = groupsRef.current[id]
-          if (held && held.newestFetch === entry.newestFetch) continue // unchanged since last seen
+          if (held && entry && held.newestFetch === entry.newestFetch) continue // unchanged since last seen
           putGroup(await readFresh(groupPath(id), group(fresh.generatedAt)))
         }
         setCheckedAt(Date.now())
@@ -224,8 +221,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const st = catalogStateRef.current[sportId]
     if (st === 'loading' || st === 'ok') return
     setCatalogState((s) => ({ ...s, [sportId]: 'loading' }))
-    const followed = () => new Set((indexRef.current?.groups ?? []).map((g) => g.groupId))
-    const parse = (v: unknown) => buildCatalogSport(v, sportId, followed())
+    const parse = (v: unknown) => buildCatalogSport(v, sportId)
     void (async () => {
       const cached = await readCached(`v1/catalog/${sportId}.json`, parse)
       if (cached) setCatalog((c) => ({ ...c, [sportId]: cached }))
