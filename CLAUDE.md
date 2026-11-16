@@ -153,22 +153,39 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
   in Spanish: `pwa/pi/INSTALL.md`.
 - **No self-hosted runner**: on a public repo a fork's PR could run code on the owner's home machine,
   and a job token for jdcm can push tags, and tags release signed APKs.
-- **jdcm-data**: the script force-pushes ONE commit per run to the public repo `olemoudi/jdcm-data`
-  (`main`) with a deploy key that can write there only (`~/.config/jdcm-fetch/deploy_key`;
-  `JDCM_PUMP_SSH=default` uses your own ssh instead, e.g. `ssk run olemoudi -- env JDCM_PUMP_SSH=default
-  pwa/pi/jdcm-fetch.sh --now` from this PC). Layout `v1/`: `groups/<id>/r<round>.json` (the site's
-  round object as sent, its matches), `groups/<id>/meta.json` (round list, fetchedAt, count,
-  shrinkSeen, lastError, fullDay), `groups/<id>/all.json` (both, what the PWA downloads),
-  `catalog/<sport>.json` (grouped calendar trimmed to teams, merged with the held one), `index.json`.
-- **Politeness** (the app's rules): one request at a time ≥ 1.5 s apart, UA `JDCM-PWA-fetch/1`, ≤ 60
-  requests and ≤ 4 min a run; non-JSON is asked once more; 5xx/429/timeouts and two odd answers in a
-  row stop the run. Per group: `IdJornada=0` (brings previous and next), rounds with a match in −3..+6
-  days (replays keep their old round), once a day the rest; once a day 3 grouped calendars. A round
-  is stored only if it is the round and group asked and holds ≥ half the held matches, or the same
-  smaller count came in an earlier run. 2 groups ≈ 2 requests a run, ≈ 14 for the first of the day.
-  Tests: `pwa/pi/test/test.sh` (a mock of the site built from the fixtures, a local bare repo).
-- **Groups**: `pwa/groups.json` on jdcm `main`, read by the script each run. The PWA's "add a child"
-  lists every team (the catalogue) and offers a prefilled request for an unfollowed group.
+- **All groups** (owner, 2026-11-16): every group of the season (~109 in 3 sports) is covered; there
+  is no list to configure. The group list and the team catalogue come from the grouped calendars.
+- **Fetch policy** (tiers, logged per run as `requests=N (boot, now, results, backfill, daily,
+  weekly)`): the grouped calendar `ObtenerCalendarioAgrupado` (`IdCompeticion=-1`) gives every
+  group's schedule and states for one sport and round number, but NO scores; a group's own page
+  `ObtenerDatosJornadaGrupo` gives scores (one group, one round, plus its neighbours). Every run:
+  grouped calendars of the round numbers with matches from −3 to +6 days (and the previous one while
+  open), then a group's page only where the grouped calendar shows a match played (or is stale) that
+  started over an hour ago, is not cancelled, is from the last 14 days and has no final result;
+  oldest first; a group whose page brings nothing new is not asked again in that run. First run of the
+  day: grouped calendars of the next 3 weeks; weekly: every other round number; groups never read on
+  their own: round 1 (backfill). A sport never read: its round 1 first (bootstrap).
+- **Politeness**: one request at a time ≥ 1.5 s apart, UA `JDCM-PWA-fetch/2`, ≤ 150 requests and
+  ≤ 8 min a run; non-JSON is asked once more; 5xx/429/timeouts and two odd answers in a row (a JSON
+  answer for the wrong round or group counts) stop the run. Defensive merges: a group's round page is
+  stored only if it is the round and group asked and holds ≥ half the held matches; a grouped answer
+  is taken per group with the same rule; either way the same smaller count is believed only when an
+  earlier run saw it too. Measured on a mock with the real grouped answers: a first run ~141 requests,
+  ~20 s of CPU here (est. a few minutes on a Pi 3, mostly the 1.5 s gaps), 35 MB RSS.
+- **jdcm-data** (`main`, one parentless commit per run built inside the shallow clone, so the push
+  carries only changed files; deploy key that can write there only, `~/.config/jdcm-fetch/deploy_key`;
+  `JDCM_PUMP_SSH=default` uses your own ssh, e.g. `ssk run olemoudi -- env JDCM_PUMP_SSH=default
+  pwa/pi/jdcm-fetch.sh --now` from this PC). Layout `v1/`: `state/sched-<sport>.json` (every grouped
+  match by id with `at` = when it last CHANGED, round numbers' fetch times, group names, refusals),
+  `groups/<id>/r<round>.json` (the group's page as sent, with scores), `groups/<id>/meta.json` (round
+  list, fetchedAt, counts, finals, refusals), `groups/<id>/all.json` (info + meta + rounds + sched:
+  what the PWA downloads for a child's group), `catalog/<sport>.json`, `index.json` (every group with
+  ids and newestFetch, ~10 KB). Tests: `pwa/pi/test/test.sh` (a mock of both endpoints built from the
+  fixtures, a local bare repo).
+- **Merging in the PWA** (`pwa/src/core/group.ts`): schedule and state (date, time, venue, state,
+  modified) from whichever source is newer; score, winner and closed only from the group's own pages
+  (a grouped "played" without a score is «Resultado pendiente»; a page's pending 0-0 never becomes a
+  result).
 - **Parsing and standings exist twice**: Kotlin `core/` for Android, `pwa/src/core/` (TypeScript) for
   the PWA: SiteParser, match semantics, the merge rules that apply to stored rounds, Standings +
   PointsRule, Schedule.matchdayOf. They are kept in step by the shared fixtures:
