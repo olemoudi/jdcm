@@ -122,6 +122,29 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
 - The updater is the one part that cannot be fixed remotely: any change to `update/` needs its JVM tests
   green and a real-phone check that the NEXT release still installs.
 
+## PWA for iPhone families (`pwa/`, `pump/`)
+
+- **Why static JSON**: the site sends no CORS headers, so a browser cannot read it. The scheduled
+  workflow `.github/workflows/pwa-data.yml` runs `:pump` (reuses `:core`: parser, merge, RefreshPolicy,
+  Standings) for the groups in `pwa/groups.json` and force-pushes ONE commit to the orphan branch `data`
+  (`index.json`, `catalog.json`, `groups/<id>.json` with standings, `state/<id>.json` = the pump's memory).
+  The PWA reads it from raw.githubusercontent.com (ACAO *, 5-min CDN cache). There is no grouped
+  results endpoint (checked 2026-11-16: the results page calls per-group endpoints only), so only listed
+  groups get results; `catalog.json` (3 grouped-calendar requests a day) lists every team for "add child".
+- **Pace (owner, 2026-11-16)**: cron `7 6-18/3 * * *` (5 runs/day), a night guard (no fetch outside
+  07–21 Madrid on scheduled runs), hot rounds refreshed every run. Pump `Limits`: ≤ 60 requests and
+  4 min per run, 1.5 s apart, one retry, UA `JDCM-PWA-data/1`. A group costs ~1 request per run.
+- **Adding a group**: paste the line from the PWA's request (issue or message) into `pwa/groups.json`.
+- **PWA**: Vite + React + Tailwind + vite-plugin-pwa (GTD25's stack and update model, see
+  `~/vibedev/gtd25/PWA_UPDATE_PROTOCOL.md`). Two channels by path on makensi.es (website repo
+  `olemoudi/olemoudi.github.io`): `/jdcm/` = beta, `/jdcm/alpha/` = alpha. Each build has its own
+  manifest id/scope, worker, cache prefix (`jdcm-<channel>-`) and storage keys (`jdcm:<channel>:`); the
+  beta worker ignores `/jdcm/alpha/`. Never use Workbox's `cleanupOutdatedCaches()` (it would delete the
+  alpha's precache). Publish: `pwa/scripts/publish.sh ~/vibedev/olemoudi.github.io beta|alpha`, then
+  commit and `ssk run olemoudi -- git push` in the website checkout.
+- **Tests**: `cd pwa && npx vitest run`; `npx playwright test` (iPhone WebKit + Android Chromium, builds
+  both channels twice and serves them nested like the real site). `./gradlew :pump:test`.
+
 ## Diagnostics (always on)
 
 - `diag/DiagLog` keeps an always-on log: two rotating 256 KB files in `filesDir/diag`, levels
