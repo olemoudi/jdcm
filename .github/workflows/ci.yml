@@ -1,13 +1,14 @@
 name: CI
 
-# Tests on every push and PR. The channel commits CI makes (channels/**) and release notes do not need a run.
+# Tests on every push and PR. The channel commits CI makes (channels/**), release notes and the PWA (pwa/**, built
+# and published by hand; its data job is pwa-data.yml) do not need a run.
 # Never tag a commit a bot made (channel pointer, coverage badge): its [skip ci] would suppress the tag's Release run too.
 on:
   push:
     branches: [main]
-    paths-ignore: ['channels/**', 'release-notes/**', 'docs/**', '**/*.md']
+    paths-ignore: ['channels/**', 'release-notes/**', 'docs/**', '**/*.md', 'pwa/**']
   pull_request:
-    paths-ignore: ['channels/**', 'release-notes/**', 'docs/**', '**/*.md']
+    paths-ignore: ['channels/**', 'release-notes/**', 'docs/**', '**/*.md', 'pwa/**']
 
 concurrency:
   group: ci-${{ github.ref }}
