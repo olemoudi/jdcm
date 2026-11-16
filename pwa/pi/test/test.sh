@@ -108,6 +108,13 @@ fetch
 check "a run while another holds the lock does nothing" '[ "$(requests)" = 0 ] && tail -1 "$T/state/fetch.log" | grep -q "another run"'
 flock -u 9
 
+echo "== a match «con incidencias» waits for the committee's ruling"
+fresh; mode played incid
+fetch >/dev/null
+check "its group is asked once for it" '[ "$(tier results)" = 8 ]'
+fetch
+check "and not again the same day (at most once a day while it has no score)" '[ "$(tier results)" = 0 ] && [ "$(group_requests)" = 0 ]'
+
 check "no jq error anywhere in the log" '! grep -q "jq: error" "$T/state/fetch.log"'
 
 echo

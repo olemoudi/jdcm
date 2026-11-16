@@ -397,19 +397,24 @@ plan_numbers() {
 # Groups whose grouped matches show one played (or due and not refreshed this run) without our final
 # result: "group round", oldest match first. Matches from the last 14 days that started over an hour
 # ago (untimed: their day has passed) and are not cancelled. A match the grouped calendar refreshed
-# this run still calls pending has no result to fetch yet.
+# this run still calls pending has no result to fetch yet. A match «disputado con incidencias» has no
+# score until the committee rules, which takes days: its group is asked at most once a day for it.
 plan_results() {
   local metas=("$D"/groups/*/meta.json)
   [[ -f ${metas[0]} ]] || metas=(/dev/null)
   jq -rn --arg recent "$RECENT" --arg today "$TODAY" --arg before "$STARTED_BEFORE" --argjson run "$STARTED_MS" \
     --slurpfile s1 "$D/state/sched-1.json" --slurpfile s2 "$D/state/sched-2.json" --slurpfile s3 "$D/state/sched-3.json" "$JQ_DEFS"'
-    ([inputs | .finals[]?[]? | tostring] | map({key: ., value: true}) | from_entries) as $finals
+    [inputs] as $metas
+    | ([$metas[] | .finals[]?[]? | tostring] | map({key: ., value: true}) | from_entries) as $finals
+    | ([$metas[] | . as $mt | (.fetchedAt // {}) | to_entries[] | {key: "\($mt.groupId):\(.key)", value: .value}] | from_entries) as $fetched
     | [($s1[0], $s2[0], $s3[0]) | .matches[]
         | select(($finals[.m.Id | num | tostring] | not) and (.m | cancelled | not))
         | (.m.FechaHora // "") as $t | ($t | day) as $d
         | select($d != null and $d >= $recent)
         | select(if ($t[11:16]) == "00:00" or ($t | length) < 16 then $d < $today else $t[0:19] <= $before end)
         | select((.m | state) == "PLAYED" or .at < $run)
+        | (((.m.IdEstadoPartido | num) == 10) or ((.m.EstadoPartido // "") | ascii_downcase | test("con incidencia"))) as $incid
+        | select(($incid | not) or (($fetched["\(.g):\(.m.IdJornada | num)"] // 0) < ($run - 72000000)))
         | {g, r: (.m.IdJornada | num), t: $t}]
     | map(select(.r > 0)) | sort_by(.t) | .[] | "\(.g) \(.r)"'  "${metas[@]}"
 }

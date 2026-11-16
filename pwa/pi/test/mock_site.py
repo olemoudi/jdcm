@@ -8,6 +8,7 @@ serves its round with the previous and next ones and, for played matches, their 
 and volleyball are empty. A mode file (space-separated words) changes the behaviour:
   played   round 1 has been played: timed matches "Disputado sin Incidencias", untimed rained off
   late     the group pages have no scores yet (the results are not entered)
+  incid    with played: timed matches "Disputado con Incidencias" (no score until the ruling)
   rain     group 177's first match of round 2 is rained off (in the grouped calendar only)
   gshrink  the grouped calendar lists only group 177
   wrong    a group's page answers another round than the one asked (JSON, but odd)
@@ -49,7 +50,10 @@ def matches(gid, n, m, with_scores):
             if x["FechaHora"][11:16] == "00:00":
                 x.update(IdEstadoPartido=6, EstadoPartido="No Celebrado/Incompleto")
             else:
-                x.update(IdEstadoPartido=11, EstadoPartido="Disputado sin Incidencias")
+                if "incid" in m:
+                    x.update(IdEstadoPartido=10, EstadoPartido="Disputado con Incidencias")
+                else:
+                    x.update(IdEstadoPartido=11, EstadoPartido="Disputado sin Incidencias")
         if n == 2 and gid == 177 and i == 0 and "rain" in m and not with_scores:
             x.update(IdEstadoPartido=6, EstadoPartido="No Celebrado/Incompleto")
         if with_scores:

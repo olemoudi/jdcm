@@ -162,7 +162,10 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
   grouped calendars of the round numbers with matches from −3 to +6 days (and the previous one while
   open), then a group's page only where the grouped calendar shows a match played (or is stale) that
   started over an hour ago, is not cancelled, is from the last 14 days and has no final result;
-  oldest first; a group whose page brings nothing new is not asked again in that run. First run of the
+  oldest first; a group whose page brings nothing new is not asked again in that run; a match «con
+  incidencias» (state 10, no score until the committee rules, days) at most once a day. The first run
+  (2026-11-16) cost 147 requests (the whole season from scratch); a normal run ~6 plus results, and a
+  match weekend ~1 page per group as its results appear. First run of the
   day: grouped calendars of the next 3 weeks; weekly: every other round number; groups never read on
   their own: round 1 (backfill). A sport never read: its round 1 first (bootstrap).
 - **Politeness**: one request at a time ≥ 1.5 s apart, UA `JDCM-PWA-fetch/2`, ≤ 150 requests and
