@@ -1,0 +1,39 @@
+{
+  "name": "jdcm-pwa",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "build:alpha": "tsc -b && JDCM_CHANNEL=alpha vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "icons": "node scripts/icons.mjs"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "4.2.1",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "tailwindcss": "4.2.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@testing-library/dom": "10.4.1",
+    "@testing-library/react": "16.3.2",
+    "@types/node": "24.12.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.1.4",
+    "jsdom": "29.0.2",
+    "typescript": "5.9.3",
+    "vite": "7.3.5",
+    "vite-plugin-pwa": "1.2.0",
+    "vitest": "4.1.8",
+    "workbox-core": "7.4.1",
+    "workbox-precaching": "7.4.1",
+    "workbox-routing": "7.4.1"
+  }
+}
