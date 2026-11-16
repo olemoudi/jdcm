@@ -1,53 +1,57 @@
 #!/usr/bin/env bash
-# jdcm-fetch.sh: reads the public JSON of juegosdeportivos.ecmadrid.org for the groups the JDCM web app
-# follows, and publishes it to the public repo olemoudi/jdcm-data (one commit, force-pushed). The web
-# app (https://makensi.es/jdcm) reads it from raw.githubusercontent.com and does all the parsing and
-# the standings itself (pwa/src/core).
+# jdcm-fetch.sh: reads the public JSON of juegosdeportivos.ecmadrid.org for EVERY group of the
+# competition (~109 in three sports) and publishes it to the public repo olemoudi/jdcm-data (one
+# commit, force-pushed). The web app (https://makensi.es/jdcm) reads it from raw.githubusercontent.com
+# and does all the parsing, merging and standings itself (pwa/src/core).
 #
 # Why here: the site sends no CORS headers (a browser cannot read it) and answers only Spanish home
 # connections (measured 2026-11-16: GitHub's runners and 16 of 17 test servers time out), so it runs
 # on a small device at home (a Raspberry Pi), from a systemd user timer (see INSTALL.md).
 #
-# Politeness, the Android app's rules: one request at a time, 1.5 s apart, an honest User-Agent, at
-# most 60 requests and 4 minutes a run, nothing at night. A body that is not JSON is asked once more;
-# a 5xx, a 429 or a timeout ends the run at once, and so do two odd answers in a row.
+# Polite by design. The grouped calendar (one request per sport and round number) carries every
+# group's schedule and match states, but no scores; scores need one request per group and round. So:
+#   1. every run: the grouped calendar of the round numbers being played (matches from 3 days ago to
+#      6 days ahead), and the one before while any of its matches is still open;
+#   2. every run: a group's own round, only for groups with a match that has started, is not
+#      cancelled, has no final result yet (from the last 14 days) and that the grouped calendar
+#      already shows as played; oldest first; a group that brings no new result is not asked again;
+#   3. once a day (the first run): the grouped calendars of the next three weeks;
+#   4. once a week: the grouped calendars of every other round number (spread over runs if needed);
+#   5. groups never read on their own: their round 1 (it brings round 2 and the season's list).
+# One request at a time 1.5 s apart, an honest User-Agent, at most 150 requests and 8 minutes a run,
+# nothing at night. A body that is not JSON is asked once more; a 5xx, a 429 or a timeout ends the
+# run, and so do two odd answers in a row. Answers are taken defensively (core's merge rules): a
+# group's round that comes back with fewer than half the matches held is refused unless an earlier
+# run saw the same count.
 #
-# Per run and group: the current round (IdJornada=0, which brings the previous and next ones with
-# their matches); any other round holding a match from 3 days ago to 6 days ahead (a replay keeps its
-# old round); once a day, the rest of the season. Once a day too, the grouped calendar of each sport
-# (3 requests) for the app's list of teams. A round is stored only if its answer is for the round and
-# group asked and holds at least half the matches held (or the same smaller count twice running).
-#
-# Usage: jdcm-fetch.sh [--now] [--full] [--no-push]
+# Usage: jdcm-fetch.sh [--now] [--no-push]
 #   --now      run even at night (a manual run; the timer never passes it)
-#   --full     also re-read every round of the season now
 #   --no-push  do everything but publish (a dry run; the result is kept in the state folder)
 # Environment (all optional): JDCM_PUMP_SSH=default uses your own ssh setup instead of the deploy key
 # (e.g. `ssk run olemoudi -- env JDCM_PUMP_SSH=default ./jdcm-fetch.sh --now`); JDCM_DATA_REMOTE,
-# JDCM_GROUPS_URL, JDCM_SITE, JDCM_FETCH_HOME/STATE/CONFIG and JDCM_FETCH_MAX_REQUESTS for tests.
+# JDCM_SITE, JDCM_FETCH_HOME/STATE/CONFIG, JDCM_FETCH_MAX_REQUESTS and JDCM_FETCH_GAP_MS for tests.
 set -euo pipefail
 
 main() {
-  VERSION=1
+  VERSION=2
   UA="JDCM-PWA-fetch/$VERSION (+https://github.com/olemoudi/jdcm)"
   SITE=${JDCM_SITE:-https://juegosdeportivos.ecmadrid.org}
-  GROUPS_URL=${JDCM_GROUPS_URL:-https://raw.githubusercontent.com/olemoudi/jdcm/main/pwa/groups.json}
   DATA_REMOTE=${JDCM_DATA_REMOTE:-git@github.com:olemoudi/jdcm-data.git}
   SSH_MODE=${JDCM_PUMP_SSH:-deploy-key}
   HOME_DIR=${JDCM_FETCH_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/jdcm-fetch}
   STATE_DIR=${JDCM_FETCH_STATE:-${XDG_STATE_HOME:-$HOME/.local/state}/jdcm-fetch}
   CONFIG_DIR=${JDCM_FETCH_CONFIG:-${XDG_CONFIG_HOME:-$HOME/.config}/jdcm-fetch}
-  MAX_REQUESTS=${JDCM_FETCH_MAX_REQUESTS:-60}
-  BUDGET_MS=$(( ${JDCM_FETCH_BUDGET_S:-240} * 1000 ))
+  MAX_REQUESTS=${JDCM_FETCH_MAX_REQUESTS:-150}
+  BUDGET_MS=$(( ${JDCM_FETCH_BUDGET_S:-480} * 1000 ))
   GAP_MS=${JDCM_FETCH_GAP_MS:-1500}
+  SPORTS="1 2 3"
 
-  local now_flag=0 full_flag=0 push=1
+  local now_flag=0 push=1
   for a in "$@"; do
     case "$a" in
       --now) now_flag=1 ;;
-      --full) full_flag=1 ;;
       --no-push) push=0 ;;
-      -h|--help) sed -n '2,30p' "$0"; return 0 ;;
+      -h|--help) sed -n '2,32p' "$0"; return 0 ;;
       *) echo "unknown option $a (see --help)" >&2; return 2 ;;
     esac
   done
@@ -75,9 +79,15 @@ main() {
   trap 'rm -rf "$WORK"' EXIT
   STARTED_MS=$(now_ms)
   TODAY=$(TZ=Europe/Madrid date +%F)
+  DAY_START_MS=$(( $(TZ=Europe/Madrid date -d "$TODAY 00:00" +%s) * 1000 ))
   FROM=$(TZ=Europe/Madrid date -d "$TODAY -3 days" +%F)
   TO=$(TZ=Europe/Madrid date -d "$TODAY +6 days" +%F)
-  REQ=0 ODD_IN_A_ROW=0 LAST_REQ_MS=0 STOPPED="" OK_ANSWERS=0 STORED=0 REFUSED=0
+  NEAR_TO=$(TZ=Europe/Madrid date -d "$TODAY +21 days" +%F)
+  RECENT=$(TZ=Europe/Madrid date -d "$TODAY -14 days" +%F)
+  STARTED_BEFORE=$(TZ=Europe/Madrid date -d '-60 min' +%FT%T) # a match that kicked off an hour ago
+  REQ=0 ODD_IN_A_ROW=0 LAST_REQ_MS=0 STOPPED="" OK_ANSWERS=0 STORED=0 REFUSED=0 TIER=boot
+  declare -gA TIER_REQ=([boot]=0 [t1]=0 [t2]=0 [t3]=0 [t4]=0 [t5]=0)
+  declare -gA GROUPED_DONE=() # "sport:number" asked during this run
   log "start (v$VERSION) today=$TODAY window=$FROM..$TO"
 
   if [[ $SSH_MODE != default ]]; then
@@ -88,73 +98,77 @@ main() {
   fi
 
   wait_for_network
-  read_groups || return 1
   read_previous || return 1
-
-  local D="$WORK/data/v1"
-  mkdir -p "$D/groups" "$D/catalog"
-
-  # Groups no longer followed go.
-  local g
-  for g in "$D"/groups/*/; do
-    [[ -d $g ]] || continue
-    g=$(basename "$g")
-    jq -e --argjson g "$g" 'any(.groups[]; .groupId == $g)' "$WORK/groups.json" >/dev/null || { log "group=$g no longer followed: removed"; rm -rf "${D:?}/groups/$g"; }
+  D="$WORK/data/v1"
+  mkdir -p "$D/groups" "$D/catalog" "$D/state"
+  local s
+  for s in $SPORTS; do
+    [[ -f $D/state/sched-$s.json ]] || echo '{"v":1,"matches":{},"rounds":{},"groups":{},"shrink":{}}' >"$D/state/sched-$s.json"
   done
 
-  local ids
-  ids=$(jq -r '.groups[].groupId' "$WORK/groups.json")
-  # 1. This weekend: the current round of every group (it brings the previous and next ones).
-  for g in $ids; do
+  # 0. A sport never read: its first round number lists every group (and the season starts with it).
+  TIER=boot
+  for s in $SPORTS; do
     [[ -n $STOPPED ]] && break
-    init_meta "$g"
-    fetch_round "$g" 0 || true
+    jq -e '.rounds | length == 0' "$D/state/sched-$s.json" >/dev/null && fetch_grouped "$s" 1 || true
   done
-  # 2. Rounds holding a match near today that step 1 did not bring (a replay keeps its old round).
-  for g in $ids; do
-    [[ -n $STOPPED ]] && break
-    local r
-    for r in $(near_rounds "$g"); do
-      [[ -n $STOPPED ]] && break
-      fresh_this_run "$g" "$r" && continue
-      fetch_round "$g" "$r" || true
+  load_refs
+
+  # 1. The round numbers being played, per sport (and the previous one while it is open).
+  TIER=t1
+  for s in $SPORTS; do
+    local n
+    for n in $(plan_numbers "$s" window); do
+      [[ -n $STOPPED ]] && break 2
+      fetch_grouped "$s" "$n" || true
     done
   done
-  # 3. Once a day: the grouped calendar of each sport, for the app's list of teams.
-  local sport
-  for sport in 1 2 3; do
+  load_refs
+
+  # 2. Results: a group's own round where the grouped calendar shows a match played without our result.
+  TIER=t2
+  declare -A asked_out=()
+  local g r
+  while read -r g r; do
     [[ -n $STOPPED ]] && break
-    fetch_catalog "$sport" || true
-  done
-  # 4. Once a day: the rest of the season, closest to today first (each answer brings two neighbours).
-  for g in $ids; do
+    [[ -z $g || -n ${asked_out[$g]:-} ]] && continue
+    fresh_this_run "$g" "$r" && continue
+    local before after
+    before=$(finals_count "$g")
+    fetch_round "$g" "$r" || true
+    after=$(finals_count "$g")
+    (( after > before )) || asked_out[$g]=1 # nothing new: not again this run
+  done < <(plan_results)
+
+  # 5. Groups never read on their own: round 1 (brings round 2 and the list of the season).
+  TIER=t5
+  while read -r g r; do
     [[ -n $STOPPED ]] && break
-    local due
-    due=$(daily_rounds "$g" "$full_flag")
-    [[ -z $due ]] && continue
-    local complete=1
-    for r in $due; do
-      [[ -n $STOPPED ]] && { complete=0; break; }
-      fresh_this_run "$g" "$r" && continue
-      fetch_round "$g" "$r" || true
-    done
-    [[ -n $STOPPED ]] && complete=0
-    (( complete )) && meta_set "$g" --arg d "$TODAY" '.fullDay = $d'
+    [[ -z $g ]] && continue
+    fresh_this_run "$g" "$r" && continue
+    fetch_round "$g" "$r" || true
+  done < <(plan_backfill)
+
+  # 3. Once a day: the next three weeks. 4. Once a week: every other round number, oldest first.
+  local tier
+  for tier in t3 t4; do
+    TIER=$tier
+    while read -r s n; do
+      [[ -n $STOPPED ]] && break 2
+      [[ -z $s ]] && continue
+      fetch_grouped "$s" "$n" || true
+    done < <(for s in $SPORTS; do plan_numbers "$s" "$tier" | sed "s/^/$s /"; done | sort -s -k3n | cut -d' ' -f1,2)
   done
 
   [[ -n $STOPPED ]] && log "W stopped: $STOPPED; the rest waits for the next run"
-  log "requests=$REQ answers=$OK_ANSWERS stored=$STORED refused=$REFUSED"
+  log "requests=$REQ (boot ${TIER_REQ[boot]}, now ${TIER_REQ[t1]}, results ${TIER_REQ[t2]}, backfill ${TIER_REQ[t5]}, daily ${TIER_REQ[t3]}, weekly ${TIER_REQ[t4]}) answers=$OK_ANSWERS stored=$STORED refused=$REFUSED"
 
-  local publish=0
-  (( OK_ANSWERS > 0 )) && publish=1
-  if (( publish )); then
-    write_views
-  fi
-  if (( publish == 0 )); then
+  if (( OK_ANSWERS == 0 )); then
     log "nothing to publish (no answer from the site)"
     write_last_run no
     return 0
   fi
+  write_views
   if (( push == 0 )); then
     rm -rf "$STATE_DIR/no-push"
     cp -r "$WORK/data" "$STATE_DIR/no-push"
@@ -163,7 +177,7 @@ main() {
     write_last_run "no (--no-push)"
     return 0
   fi
-  if publish_data; then write_last_run yes; else write_last_run "FAILED"; return 1; fi
+  if publish_data; then write_last_run yes; else write_last_run FAILED; return 1; fi
 }
 
 # --- plumbing ------------------------------------------------------------------------------------
@@ -194,28 +208,14 @@ wait_for_network() {
   log "W no DNS yet; trying anyway"
 }
 
-# groups.json from jdcm main: the owner adds a group by committing there. The last good copy is kept
-# (written only when it changes) for when GitHub cannot be reached.
-read_groups() {
-  local cached="$HOME_DIR/groups.json"
-  if curl -fsS --max-time 30 -A "$UA" -o "$WORK/groups.new" "$GROUPS_URL" 2>"$WORK/curl.err" \
-    && jq -e '(.groups | type == "array") and all(.groups[]; (.groupId|type) == "number" and .groupId > 0 and .sportId > 0 and .competitionId > 0 and .categoryId > 0)' "$WORK/groups.new" >/dev/null; then
-    cmp -s "$WORK/groups.new" "$cached" || cp "$WORK/groups.new" "$cached"
-  else
-    log "W could not read groups.json ($(head -c 120 "$WORK/curl.err" 2>/dev/null)); using the last good copy"
-  fi
-  [[ -f $cached ]] || { log "E no groups.json"; return 1; }
-  cp "$cached" "$WORK/groups.json"
-  log "groups: $(jq -c '[.groups[].groupId]' "$WORK/groups.json")"
-}
-
-# What was published last time is this run's memory: a shallow clone into the work folder.
+# What was published last time is this run's memory: a shallow clone into the work folder. The new
+# commit is built in it, so the push sends only the files that changed.
 read_previous() {
   local rc=0
   git ls-remote --exit-code --heads "$DATA_REMOTE" main >/dev/null 2>"$WORK/git.err" || rc=$?
   if (( rc == 2 )); then
     log "no data published yet: first run"
-    mkdir -p "$WORK/data"
+    git init -q -b main "$WORK/data"
     return 0
   elif (( rc != 0 )); then
     log "E cannot read $DATA_REMOTE: $(tr '\n' ' ' < "$WORK/git.err" | head -c 200)"
@@ -238,6 +238,7 @@ site_get() {
     local pause=$(( LAST_REQ_MS + GAP_MS - $(now_ms) ))
     if (( pause > 0 )); then sleep "$(( pause / 1000 )).$(printf '%03d' $(( pause % 1000 )))"; fi
     REQ=$((REQ + 1))
+    TIER_REQ[$TIER]=$(( ${TIER_REQ[$TIER]} + 1 ))
     rc=0
     code=$(curl -sS -o "$WORK/body" -w '%{http_code}' --max-time 30 --connect-timeout 15 --max-filesize 4194304 \
       -A "$UA" -H 'Accept: application/json, text/javascript, */*; q=0.01' -H 'X-Requested-With: XMLHttpRequest' \
@@ -247,8 +248,9 @@ site_get() {
     if (( rc != 0 )); then STOPPED="site down (curl $rc: $(head -c 80 "$WORK/curl.err" | tr '\n' ' '))"; return 2; fi
     if [[ $code == 429 || $code == 5* ]]; then STOPPED="site down (HTTP $code)"; return 2; fi
     if [[ $code != 2* ]]; then log "W $label: HTTP $code"; odd_answer; return $?; fi
+    # (The odd-answer streak is reset by the caller once the answer is taken: a JSON answer for the
+    # wrong round or group is as odd as a login page.)
     if jq -c 'if type == "string" then fromjson else . end' "$WORK/body" >"$out" 2>/dev/null && [[ -s $out ]]; then
-      ODD_IN_A_ROW=0
       OK_ANSWERS=$((OK_ANSWERS + 1))
       return 0
     fi
@@ -264,22 +266,185 @@ odd_answer() {
   return 1
 }
 
-gdir() { printf '%s' "$WORK/data/v1/groups/$1"; }
+# Shared jq definitions: tolerant numbers and dates, and core's idea of a final result
+# (core/model/Model.kt Match.hasResult, and MatchStatus.of: the state's name first, then its id).
+JQ_DEFS='
+def num: if type == "number" then . elif type == "string" then (tonumber? // 0) else 0 end;
+def isnum: type == "number" or (type == "string" and ((tonumber? // null) != null));
+def day: if type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}") then .[0:10] else null end;
+def state: ((.EstadoPartido // "") | ascii_downcase) as $n | (.IdEstadoPartido | num) as $i
+  | if ($n | test("desprogram")) then "UNSCHEDULED"
+    elif ($n | test("aplaz|suspend")) then "POSTPONED"
+    elif ($n | test("no celebrado|incomplet")) then "NOT_HELD"
+    elif ($n | test("pendiente")) then "SCHEDULED"
+    elif ($n | test("jugado|finaliz|celebrado|disputado|acta|cerrado")) then "PLAYED"
+    elif $i == 0 then "SCHEDULED" elif $i == 1 then "POSTPONED" elif $i == 6 then "NOT_HELD"
+    elif $i == 10 or $i == 11 then "PLAYED" elif $i == 12 then "UNSCHEDULED" else "UNKNOWN" end;
+def cancelled: state as $s | $s == "POSTPONED" or $s == "UNSCHEDULED" or $s == "NOT_HELD";
+def final: state as $s
+  | ((.IdEquipoLocal | num) > 0 and (.IdEquipoVisitante | num) > 0 and (.ResultadoEquipoLocal | isnum) and (.ResultadoEquipoVisitante | isnum))
+    and (if $s == "POSTPONED" or $s == "UNSCHEDULED" then false
+         elif $s == "PLAYED" then true
+         elif $s == "NOT_HELD" then (.IdEquipoGanador | num) != 0 or ((.ResultadoEquipoLocal | num) + (.ResultadoEquipoVisitante | num)) > 0
+         else (.Cerrado == true) or (.IdEquipoGanador | num) != 0 or ((.ResultadoEquipoLocal | num) + (.ResultadoEquipoVisitante | num)) > 0 end);
+'
+
+gdir() { printf '%s' "$D/groups/$1"; }
+
+# The four ids the site wants for a group, from the grouped calendars: REF[group]="sport comp cat".
+load_refs() {
+  declare -gA REF=()
+  local g s c k
+  while read -r g s c k; do
+    [[ -n $g ]] && REF[$g]="$s $c $k"
+  done < <(for s in $SPORTS; do jq -r --argjson s "$s" '.groups | to_entries[] | "\(.key) \($s) \(.value.c) \(.value.k)"' "$D/state/sched-$s.json"; done)
+}
+
+# --- the grouped calendar: schedules and states of every group, no scores --------------------------
+
+# One sport's round number: every group's matches of that round (trimmed to what the app reads),
+# merged into state/sched-<sport>.json defensively per group: a group whose answer has fewer than
+# half the matches held for that round is refused unless an earlier run saw the same count.
+# Linear passes and object lookups only (a 250 KB answer and a 1-2 MB state on a Pi 3, jq 1.6).
+fetch_grouped() {
+  local s=$1 n=$2 rc=0 f="$D/state/sched-$1.json"
+  [[ -n ${GROUPED_DONE[$s:$n]:-} ]] && return 0
+  GROUPED_DONE[$s:$n]=1
+  site_get "Calendarios/ObtenerCalendarioAgrupado?IdDeporte=$s&IdCompeticion=-1&IdCategoria=0&NumeroJornada=$n&IdEquipo=0" \
+    "$WORK/grouped.json" "grouped sport=$s round=$n" || rc=$?
+  (( rc == 0 )) || return "$rc"
+  if ! jq -c --argjson N "$n" --argjson now "$(now_ms)" --argjson run "$STARTED_MS" --slurpfile st "$f" "$JQ_DEFS"'
+    def venue: if type == "object" then {Nombre, Direccion, CP, Municipio, Latitud, Longitud} else null end;
+    def trimm: {Id, IdGrupo, IdJornada, NumeroJornada, FechaHora, Campo, CampoJuego: (.CampoJuego | venue), Latitud, Longitud,
+      IdEstadoPartido, EstadoPartido, CambioAdministrador, MotivoCambioAdministrador,
+      SolicitudesModificaciones: [(.SolicitudesModificaciones // [])[]? | select(type == "object") | {IdEstadoSolicitud}],
+      IdEquipoLocal, EquipoLocal, URLEscudoEquipoLocal, IdEquipoVisitante, EquipoVisitante, URLEscudoEquipoVisitante};
+    $st[0] as $st
+    | if type != "array" then error("not a grouped calendar") else . end
+    | [.[] | select(type == "object") | . as $c | (.Categorias // [])[]? | select(type == "object") | . as $k
+        | (.Grupos // [])[]? | select(type == "object") | select((.IdGrupo | num) > 0)
+        | {g: (.IdGrupo | num | tostring),
+           info: {c: ($c.IdCompeticion | num), cn: ($c.Competicion // ""), k: ($k.IdCategoria | num), kn: ($k.Categoria // ""), gn: (.Grupo // "")},
+           ms: [(.Enfrentamientos // [])[]? | select(type == "object" and (.Id | num) > 0) | trimm]}] as $groups
+    | ($groups | map({key: .g, value: (.ms | length)}) | from_entries) as $incoming
+    | ([$st.matches[] | select(.n == $N) | .g | tostring] | group_by(.) | map({key: .[0], value: length}) | from_entries) as $held
+    | (($incoming | keys) + ($held | keys) | unique) as $gids
+    | [$gids[] | . as $g | ($incoming[$g] // 0) as $in | ($held[$g] // 0) as $h | ($st.shrink["\($g):\($N)"] // {}) as $seen
+        | {g: $g, in: $in, held: $h, ok: ($h == 0 or $in * 2 >= $h or (($seen.n // -1) == $in and ($seen.at // $run) < $run))}] as $dec
+    | ([$dec[] | select(.ok) | {key: .g, value: true}] | from_entries) as $acc
+    | $st
+    | .matches = ((.matches | with_entries(select(.value.n != $N or ($acc[.value.g | tostring] | not))))
+        + ([$groups[] | select($acc[.g]) | .g as $g | .ms[] | (.Id | num | tostring) as $id
+            # "at" is when this match last CHANGED: an unchanged match keeps its stamp, so its group
+            # files stay the same and the push carries only what changed.
+            | {key: $id, value: {at: (if $st.matches[$id].m == . then $st.matches[$id].at else $now end), g: ($g | tonumber), n: $N, m: .}}] | from_entries))
+    | .groups = (.groups + ([$groups[] | {key: .g, value: .info}] | from_entries))
+    | .rounds[$N | tostring] = $now
+    | .shrink = (reduce $dec[] as $d (.shrink;
+        if $d.ok then del(.["\($d.g):\($N)"])
+        elif (.["\($d.g):\($N)"].n // -1) == $d.in then .
+        else .["\($d.g):\($N)"] = {n: $d.in, at: $run} end))
+    | .last = {round: $N, groups: ($incoming | length), accepted: ($acc | length), refused: [$dec[] | select(.ok | not) | "\(.g): \(.in) of \(.held)"]}
+  ' "$WORK/grouped.json" >"$WORK/sched.new" 2>"$WORK/jq.err"; then
+    log "W grouped sport=$s round=$n: not a grouped calendar ($(head -c 100 "$WORK/jq.err")); nothing stored"
+    REFUSED=$((REFUSED + 1))
+    odd_answer || true
+    return 1
+  fi
+  mv "$WORK/sched.new" "$f"
+  ODD_IN_A_ROW=0
+  STORED=$((STORED + 1))
+  local summary
+  summary=$(jq -r '.last | "groups=\(.groups) accepted=\(.accepted)" + (if (.refused | length) > 0 then " refused=\(.refused | join(", "))" else "" end)' "$f")
+  [[ $summary == *refused=* ]] && REFUSED=$((REFUSED + 1))
+  log "grouped sport=$s round=$n $summary"
+}
+
+# Round numbers of a sport to ask the grouped calendar for: "window" (matches from -3 to +6 days,
+# and the previous number while one of its matches is still open), "t3" (the next three weeks,
+# unless asked today) or "t4" (every number not asked for a week, oldest first, with its age).
+# Dates come from the grouped matches and from the groups' own round lists.
+plan_numbers() {
+  local s=$1 what=$2 metas=("$D"/groups/*/meta.json)
+  [[ -f ${metas[0]} ]] || metas=(/dev/null)
+  jq -rn --argjson s "$s" --arg what "$what" --arg from "$FROM" --arg to "$TO" --arg today "$TODAY" --arg near "$NEAR_TO" \
+    --argjson now "$(now_ms)" --argjson daystart "$DAY_START_MS" --slurpfile st "$D/state/sched-$s.json" "$JQ_DEFS"'
+    $st[0] as $st
+    | [inputs | select(.ref.sportId == $s)] as $metas
+    | ([$metas[] | .finals[]?[]? | tostring] | map({key: ., value: true}) | from_entries) as $finals
+    | ([$st.matches[] | {n, d: (.m.FechaHora | day)}] + [$metas[] | .rounds[]? | {n: .number, d: .date}]
+        | map(select(.n != null and .n > 0))) as $dated
+    | if $what == "window" then
+        ([$dated[] | select(.d != null and .d >= $from and .d <= $to) | .n] | unique) as $win
+        | if ($win | length) == 0 then empty else
+            ([$dated[] | .n | select(. < ($win | min))] | max) as $prev
+            | (if $prev != null and any($st.matches[]; .n == $prev and (.m | cancelled | not) and ((.m.IdEstadoPartido | num) != 11 or ($finals[.m.Id | num | tostring] | not)))
+               then [$prev] else [] end) + $win | .[]
+          end
+      elif $what == "t3" then
+        [$dated[] | select(.d != null and .d >= $today and .d <= $near) | .n] | unique | .[]
+        | select(($st.rounds[tostring] // 0) < $daystart)
+      else
+        [$dated[] | .n] + [$st.rounds | keys[] | tonumber] | unique | .[] | . as $n
+        | (($st.rounds[$n | tostring] // 0)) as $at
+        | select($now - $at > 7 * 86400000)
+        | "\($n) \($at)"
+      end' "${metas[@]}"
+}
+
+# --- a group's own rounds: the scores --------------------------------------------------------------
+
+# Groups whose grouped matches show one played (or due and not refreshed this run) without our final
+# result: "group round", oldest match first. Matches from the last 14 days that started over an hour
+# ago (untimed: their day has passed) and are not cancelled. A match the grouped calendar refreshed
+# this run still calls pending has no result to fetch yet.
+plan_results() {
+  local metas=("$D"/groups/*/meta.json)
+  [[ -f ${metas[0]} ]] || metas=(/dev/null)
+  jq -rn --arg recent "$RECENT" --arg today "$TODAY" --arg before "$STARTED_BEFORE" --argjson run "$STARTED_MS" \
+    --slurpfile s1 "$D/state/sched-1.json" --slurpfile s2 "$D/state/sched-2.json" --slurpfile s3 "$D/state/sched-3.json" "$JQ_DEFS"'
+    ([inputs | .finals[]?[]? | tostring] | map({key: ., value: true}) | from_entries) as $finals
+    | [($s1[0], $s2[0], $s3[0]) | .matches[]
+        | select(($finals[.m.Id | num | tostring] | not) and (.m | cancelled | not))
+        | (.m.FechaHora // "") as $t | ($t | day) as $d
+        | select($d != null and $d >= $recent)
+        | select(if ($t[11:16]) == "00:00" or ($t | length) < 16 then $d < $today else $t[0:19] <= $before end)
+        | select((.m | state) == "PLAYED" or .at < $run)
+        | {g, r: (.m.IdJornada | num), t: $t}]
+    | map(select(.r > 0)) | sort_by(.t) | .[] | "\(.g) \(.r)"'  "${metas[@]}"
+}
+
+# Groups listed by the grouped calendars and never read on their own: "group round-1-id" (or 0, the
+# round the site calls current, when the grouped calendar has no round 1 for it).
+plan_backfill() {
+  local s
+  for s in $SPORTS; do
+    jq -r '([.matches[] | select(.n == 1) | {key: (.g | tostring), value: (.m.IdJornada)}] | from_entries) as $r1
+      | .groups | keys[] | "\(.) \($r1[.] // 0)"' "$D/state/sched-$s.json"
+  done | while read -r g r; do
+    # No meta, or a meta without any round read (a first attempt that failed). jq -c writes "fetchedAt":{}.
+    [[ -f $(gdir "$g")/meta.json ]] && ! grep -q '"fetchedAt":{}' "$(gdir "$g")/meta.json" && continue
+    echo "$g $r"
+  done
+}
+
+finals_count() {
+  local f
+  f="$(gdir "$1")/meta.json"
+  [[ -f $f ]] && jq '[.finals[]?[]?] | length' "$f" || echo 0
+}
 
 # A group's meta.json: the site's round list, when each round was accepted, how many matches it
-# holds, refused counts (shrinkSeen), the last attempt and error, the day of the last full pass.
+# holds, refused counts (shrinkSeen), the ids with a final result (finals), the last attempt and error.
 init_meta() {
-  local g=$1 dir
+  local g=$1 dir s c k
   dir=$(gdir "$g")
   mkdir -p "$dir"
-  local ref
-  ref=$(jq -c --argjson g "$g" '.groups[] | select(.groupId == $g) | {groupId, sportId, competitionId, categoryId, label: (.label // "")}' "$WORK/groups.json")
-  if [[ ! -f $dir/meta.json ]]; then
-    jq -n --argjson ref "$ref" '{v: 1, groupId: $ref.groupId, ref: ($ref | del(.label)), label: $ref.label, group: {}, rounds: [],
-      fetchedAt: {}, count: {}, shrinkSeen: {}, currentRoundId: 0, lastAttempt: 0, lastError: null, fullDay: ""}' >"$dir/meta.json"
-  else
-    meta_set "$g" --argjson ref "$ref" '.ref = ($ref | del(.label)) | .label = $ref.label'
-  fi
+  [[ -f $dir/meta.json ]] && return 0
+  read -r s c k <<<"${REF[$g]:-0 0 0}"
+  jq -n --argjson g "$g" --argjson s "$s" --argjson c "$c" --argjson k "$k" '{v: 1, groupId: $g,
+    ref: {groupId: $g, sportId: $s, competitionId: $c, categoryId: $k}, group: {}, rounds: [],
+    fetchedAt: {}, count: {}, finals: {}, shrinkSeen: {}, currentRoundId: 0, lastAttempt: 0, lastError: null}' >"$dir/meta.json"
 }
 
 meta_set() {
@@ -291,19 +456,22 @@ meta_set() {
 
 # Answered during this run already (a neighbour of an earlier answer, accepted or refused).
 fresh_this_run() {
-  jq -e --arg r "$2" --argjson t "$STARTED_MS" '(.fetchedAt[$r] // 0) >= $t or (.shrinkSeen[$r].at // 0) >= $t' "$(gdir "$1")/meta.json" >/dev/null
+  local f
+  f="$(gdir "$1")/meta.json"
+  [[ -f $f ]] && jq -e --arg r "$2" --argjson t "$STARTED_MS" '(.fetchedAt[$r] // 0) >= $t or (.shrinkSeen[$r].at // 0) >= $t' "$f" >/dev/null
 }
 
 # One round of a group ([round] 0 = the one the site calls current), checked and stored.
 fetch_round() {
-  local g=$1 r=$2 dir ref q rc=0
+  local g=$1 r=$2 dir q rc=0 s c k
+  [[ -n ${REF[$g]:-} ]] || { log "W group=$g: not in any grouped calendar; skipped"; return 1; }
+  read -r s c k <<<"${REF[$g]}"
+  init_meta "$g"
   dir=$(gdir "$g")
-  ref=$(jq -r '.ref | "IdDeporte=\(.sportId)&IdCompeticion=\(.competitionId)&IdCategoria=\(.categoryId)&IdGrupo=\(.groupId)"' "$dir/meta.json")
-  q="Calendarios/ObtenerDatosJornadaGrupo?$ref&IdJornada=$r&IdEquipo=0"
-  meta_set "$g" --argjson t "$(now_ms)" '.lastAttempt = $t'
+  q="Calendarios/ObtenerDatosJornadaGrupo?IdDeporte=$s&IdCompeticion=$c&IdCategoria=$k&IdGrupo=$g&IdJornada=$r&IdEquipo=0"
   site_get "$q" "$WORK/answer.json" "group=$g round=$r" || rc=$?
   if (( rc != 0 )); then
-    meta_set "$g" --arg e "${STOPPED:-odd answer}" '.lastError = $e'
+    meta_set "$g" --arg e "${STOPPED:-odd answer}" --argjson t "$(now_ms)" '.lastError = $e | .lastAttempt = $t'
     return "$rc"
   fi
   store_answer "$g" "$r"
@@ -315,38 +483,34 @@ fetch_round() {
 store_answer() {
   local g=$1 asked=$2 dir
   dir=$(gdir "$g")
-  if ! jq -c --argjson g "$g" --argjson asked "$asked" --argjson run "$STARTED_MS" --slurpfile meta "$dir/meta.json" -f <(cat <<'JQ'
-def num: if type == "number" then . elif type == "string" then (tonumber? // 0) else 0 end;
-def rdate: (.Fecha // "") | if type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}") then .[0:10] else null end;
-def roundOf: {id: (.Id | num), number: (.NumeroJornada | num), date: rdate};
-$meta[0] as $m
-| if type != "object" or ((has("jornada") or has("jornadas")) | not) then {error: "not a round page"}
-  elif $asked != 0 and ((.jornada.Id? // 0) | num) != $asked then {error: "asked round \($asked), got \((.jornada.Id? // 0) | num)"}
-  else
-    . as $a
-    | [ ["asked", $a.jornada], ["previous", $a.previous], ["next", $a.next] ]
-    | map(select((.[1] | type) == "object" and ((.[1].Id // 0) | num) > 0 and ((.[1].Enfrentamientos | type) == "array")))
-    | map(.[1] as $r
-        | ($r.Enfrentamientos | map(select(type == "object"))) as $all
-        | ($all | map(select(((.IdGrupo // 0) | num) == $g or ((.IdGrupo // 0) | num) == 0))) as $ours
-        | ($r | roundOf) as $ro
-        | ($m.count[$ro.id | tostring] // 0) as $held
-        | ($ours | length) as $n
-        | ($m.shrinkSeen[$ro.id | tostring] // {}) as $seen
-        | (($all | length) > 0 and $n == 0) as $stranger
-        | {kind: .[0], round: $ro, obj: ($r | .Enfrentamientos = $ours), n: $n, held: $held,
-           # The same smaller count believed only if a previous run saw it too (not seconds ago).
-           ok: (($stranger | not) and ($held == 0 or $n * 2 >= $held or (($seen.n // -1) == $n and ($seen.at // $run) < $run))),
-           shrink: ($stranger | not),
-           why: (if $stranger then "an answer for another group" else "\($n) matches where \($held) are held" end)})
-    | . as $rounds
-    | {rounds: $rounds,
-       list: ([$a.jornadas[]? | select(type == "object") | roundOf | select(.id > 0)] | sort_by(.number)),
-       current: (if $asked == 0 then (($a.jornada.Id? // 0) | num) else 0 end),
-       group: ([$rounds[] | .obj.Enfrentamientos[]] | first // {} | {name: (.Grupo // ""), competition: (.Competicion // ""), category: (.Categoria // ""), sport: (.Deporte // "")})}
-  end
-JQ
-) "$WORK/answer.json" >"$WORK/decision.json" 2>"$WORK/jq.err"; then
+  if ! jq -c --argjson g "$g" --argjson asked "$asked" --argjson run "$STARTED_MS" --slurpfile meta "$dir/meta.json" "$JQ_DEFS"'
+    def roundOf: {id: (.Id | num), number: (.NumeroJornada | num), date: (.Fecha | day)};
+    $meta[0] as $m
+    | if type != "object" or ((has("jornada") or has("jornadas")) | not) then {error: "not a round page"}
+      elif $asked != 0 and ((.jornada.Id? // 0) | num) != $asked then {error: "asked round \($asked), got \((.jornada.Id? // 0) | num)"}
+      else
+        . as $a
+        | [["asked", $a.jornada], ["previous", $a.previous], ["next", $a.next]]
+        | map(select((.[1] | type) == "object" and ((.[1].Id // 0) | num) > 0 and ((.[1].Enfrentamientos | type) == "array")))
+        | map(.[1] as $r
+            | ($r.Enfrentamientos | map(select(type == "object"))) as $all
+            | ($all | map(select(((.IdGrupo // 0) | num) == $g or ((.IdGrupo // 0) | num) == 0))) as $ours
+            | ($r | roundOf) as $ro
+            | ($m.count[$ro.id | tostring] // 0) as $held
+            | ($ours | length) as $n
+            | ($m.shrinkSeen[$ro.id | tostring] // {}) as $seen
+            | (($all | length) > 0 and $n == 0) as $stranger
+            | {kind: .[0], round: $ro, obj: ($r | .Enfrentamientos = $ours), n: $n, held: $held,
+               finals: [$ours[] | select(final) | .Id | num],
+               ok: (($stranger | not) and ($held == 0 or $n * 2 >= $held or (($seen.n // -1) == $n and ($seen.at // $run) < $run))),
+               shrink: ($stranger | not),
+               why: (if $stranger then "an answer for another group" else "\($n) matches where \($held) are held" end)})
+        | . as $rounds
+        | {rounds: $rounds,
+           list: ([$a.jornadas[]? | select(type == "object") | roundOf | select(.id > 0)] | sort_by(.number)),
+           current: (if $asked == 0 then (($a.jornada.Id? // 0) | num) else 0 end),
+           group: ([$rounds[] | .obj.Enfrentamientos[]] | first // {} | {name: (.Grupo // ""), competition: (.Competicion // ""), category: (.Categoria // ""), sport: (.Deporte // "")})}
+      end' "$WORK/answer.json" >"$WORK/decision.json" 2>"$WORK/jq.err"; then
     log "W group=$g round=$asked: the answer could not be read ($(head -c 100 "$WORK/jq.err"))"
     odd_answer || true
     return 1
@@ -360,8 +524,8 @@ JQ
     odd_answer || true
     return 1
   fi
-  # Accepted rounds: their files.
-  local id json n
+  ODD_IN_A_ROW=0
+  local id json n why
   while IFS=$'\t' read -r id n json; do
     printf '%s\n' "$json" >"$dir/r$id.json"
     STORED=$((STORED + 1))
@@ -370,137 +534,122 @@ JQ
     log "W group=$g round=$id refused: $why; the previous copy stays"
     REFUSED=$((REFUSED + 1))
   done < <(jq -r '.rounds[] | select(.ok | not) | "\(.round.id)\t\(.why)"' "$WORK/decision.json")
-  # The meta: stamps, counts, refused counts, the round list (only a plausible one), names.
   meta_set "$g" --argjson t "$(now_ms)" --argjson run "$STARTED_MS" --slurpfile d "$WORK/decision.json" '
     $d[0] as $d
-    | reduce ($d.rounds[] | select(.ok)) as $r (.; .fetchedAt[$r.round.id | tostring] = $t | .count[$r.round.id | tostring] = $r.n | del(.shrinkSeen[$r.round.id | tostring]))
+    | reduce ($d.rounds[] | select(.ok)) as $r (.; .fetchedAt[$r.round.id | tostring] = $t | .count[$r.round.id | tostring] = $r.n
+        | .finals[$r.round.id | tostring] = $r.finals | del(.shrinkSeen[$r.round.id | tostring]))
     | reduce ($d.rounds[] | select((.ok | not) and .shrink)) as $r (.; .shrinkSeen[$r.round.id | tostring] |= (if (.n // -1) == $r.n then . else {n: $r.n, at: $run} end))
     | ([$d.rounds[] | select(.ok) | .round.id]) as $got
     | (if ($d.list | length) > 0 and ($got - [$d.list[].id] | length) == 0 and ((.rounds | length) < 4 or ($d.list | length) * 2 >= (.rounds | length))
        then .rounds = $d.list else . end)
     | (if $d.current > 0 and ([$d.rounds[] | select(.ok and .kind == "asked") | .round.id] | index($d.current)) != null then .currentRoundId = $d.current else . end)
     | (if ($d.group.name // "") != "" then .group = $d.group else . end)
-    | .lastError = null'
+    | .lastAttempt = $t | .lastError = null'
   prune_rounds "$g"
-  log "group=$g round=$asked stored=$(jq -c '[.rounds[] | select(.ok) | .round.id]' "$WORK/decision.json")"
+  log "group=$g round=$asked stored=$(jq -c '[.rounds[] | select(.ok) | .round.id]' "$WORK/decision.json") finals=$(finals_count "$g")"
 }
 
 # Rounds the site no longer lists go, unless they hold a result (core: never drop a played round).
 prune_rounds() {
-  local g=$1 dir f id
+  local g=$1 dir f id listed
   dir=$(gdir "$g")
+  listed=" $(jq -r '[.rounds[].id] | join(" ")' "$dir/meta.json") "
   for f in "$dir"/r*.json; do
     [[ -f $f ]] || continue
     id=${f##*/r}; id=${id%.json}
-    jq -e --argjson id "$id" 'any(.rounds[]; .id == $id)' "$dir/meta.json" >/dev/null && continue
-    if jq -e 'any(.Enfrentamientos[]?; ((.IdEstadoPartido // 0) == 10 or (.IdEstadoPartido // 0) == 11 or (.IdEquipoGanador // 0) != 0)
-              and (.ResultadoEquipoLocal | type) == "number" and (.ResultadoEquipoVisitante | type) == "number")' "$f" >/dev/null; then
+    [[ $listed == *" $id "* ]] && continue
+    if jq -e "$JQ_DEFS"'any(.Enfrentamientos[]?; final)' "$f" >/dev/null; then
       meta_set "$g" --argjson id "$id" --slurpfile r "$f" '.rounds = (.rounds + [{id: $id, number: ($r[0].NumeroJornada // 0), date: (($r[0].Fecha // "")[0:10])}] | unique_by(.id) | sort_by(.number))'
       continue
     fi
     log "group=$g round=$id no longer listed by the site: removed"
     rm -f "$f"
-    meta_set "$g" --arg id "$id" 'del(.fetchedAt[$id], .count[$id], .shrinkSeen[$id])'
+    meta_set "$g" --arg id "$id" 'del(.fetchedAt[$id], .count[$id], .finals[$id], .shrinkSeen[$id])'
   done
 }
 
-# Rounds with a match (or the round's own date) from 3 days ago to 6 days ahead, nearest first.
-near_rounds() {
-  local dir
-  dir=$(gdir "$1")
-  local files=("$dir"/r*.json)
-  [[ -f ${files[0]} ]] || return 0
-  jq -rn --arg from "$FROM" --arg to "$TO" --arg today "$TODAY" '
-    def day: if type == "string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}") then .[0:10] else null end;
-    def epoch: strptime("%Y-%m-%d") | mktime;
-    ($today | epoch) as $t
-    | [inputs | {id: .Id, days: ([(.Fecha | day)] + [.Enfrentamientos[]? | (.FechaHora | day)] | map(select(. != null and . >= $from and . <= $to)))}
-      | select(.days | length > 0)]
-    | sort_by([.days[] | epoch - $t | fabs] | min) | .[].id' "${files[@]}"
-}
+# --- what the web app reads ------------------------------------------------------------------------
 
-# Once a day (or every round older than 24 h): the rest of the season, nearest to today first.
-daily_rounds() {
-  local g=$1 full=$2
-  jq -r --arg today "$TODAY" --argjson now "$(now_ms)" --argjson full "$full" '
-    . as $m
-    | (.fullDay != $today or $full == 1) as $pass
-    | [.rounds[] | . as $r | select($pass or ($now - ($m.fetchedAt[$r.id | tostring] // 0)) > 86400000)
-       | {id, dist: (if .date then ((.date | strptime("%Y-%m-%d") | mktime) - ($today | strptime("%Y-%m-%d") | mktime)) | fabs else 1e12 end)}]
-    | sort_by(.dist) | .[].id' "$(gdir "$g")/meta.json"
-}
-
-# The grouped calendar of a sport (one request, once a day), trimmed to the teams of each group, and
-# merged with what was held: a group missing from today's answer stays in the list.
-fetch_catalog() {
-  local sport=$1 f="$WORK/data/v1/catalog/$1.json" number rc=0
-  if [[ -f $f ]] && jq -e --arg d "$TODAY" '.day == $d' "$f" >/dev/null; then return 0; fi
-  number=$(jq -rs --argjson s "$sport" '[.[] | select(.ref.sportId == $s) | . as $m | .rounds[] | select(.id == $m.currentRoundId) | .number] | first // 1' "$WORK"/data/v1/groups/*/meta.json 2>/dev/null || echo 1)
-  [[ $number =~ ^[0-9]+$ ]] && (( number > 0 )) || number=1
-  site_get "Calendarios/ObtenerCalendarioAgrupado?IdDeporte=$sport&IdCompeticion=-1&IdCategoria=0&NumeroJornada=$number&IdEquipo=0" "$WORK/grouped.json" "catalog sport=$sport" || rc=$?
-  (( rc == 0 )) || return "$rc"
-  local held='[]'
-  [[ -f $f ]] && held=$(jq -c '.competitions // []' "$f")
-  if ! jq -c --argjson held "$held" --argjson s "$sport" --arg d "$TODAY" --argjson t "$(now_ms)" --argjson n "$number" '
-      def trim: [.[]? | select(type == "object") | {IdCompeticion, Competicion, Categorias: [.Categorias[]? | {IdCategoria, Categoria,
-        Grupos: [.Grupos[]? | {IdGrupo, Grupo, Enfrentamientos: [.Enfrentamientos[]? | {Id, IdGrupo, IdEquipoLocal, EquipoLocal, URLEscudoEquipoLocal, IdEquipoVisitante, EquipoVisitante, URLEscudoEquipoVisitante}]}]}]}];
-      def flat: [.[] as $c | $c.Categorias[] as $k | $k.Grupos[] | {c: $c.IdCompeticion, cn: $c.Competicion, k: $k.IdCategoria, kn: $k.Categoria, g: .}];
-      def nest: group_by(.c) | map({IdCompeticion: .[0].c, Competicion: .[0].cn,
-        Categorias: (group_by(.k) | map({IdCategoria: .[0].k, Categoria: .[0].kn, Grupos: map(.g)}))});
-      if type != "array" then error("not a grouped calendar") else . end
-      | (trim | flat) as $new
-      | ($new | map(.g.IdGrupo)) as $ids
-      | ($held | flat | map(select(.g.IdGrupo as $i | $ids | index($i) | not))) as $kept
-      | {v: 1, sportId: $s, day: $d, fetchedAt: $t, number: $n, groups: ($new | length), kept: ($kept | length),
-         competitions: ($new + $kept | nest)}' "$WORK/grouped.json" >"$WORK/catalog.json" 2>"$WORK/jq.err"; then
-    log "W catalog sport=$sport: not a grouped calendar ($(head -c 100 "$WORK/jq.err")); the previous list stays"
-    odd_answer || true
-    return 1
-  fi
-  mv "$WORK/catalog.json" "$f"
-  STORED=$((STORED + 1))
-  log "catalog sport=$sport round=$number groups=$(jq .groups "$f") kept=$(jq .kept "$f")"
-}
-
-# What the web app reads: per group, all.json (meta + every listed round, one request instead of
-# twenty), and index.json.
+# Per group all.json (its own rounds, its grouped matches, its names), per sport the catalogue of
+# groups and teams, and a small index.json. One jq pass per sport splits the grouped matches by group.
 write_views() {
-  local D="$WORK/data/v1" g dir files
-  for dir in "$D"/groups/*/; do
-    [[ -d $dir ]] || continue
-    files=("$dir"r*.json)
-    if [[ -f ${files[0]} ]]; then
-      jq -cn --slurpfile meta "${dir}meta.json" '$meta[0] as $m | {v: 1, meta: $m,
-        rounds: (reduce inputs as $r ({}; if any($m.rounds[]; .id == $r.Id) then .[$r.Id | tostring] = $r else . end))}' "${files[@]}" >"${dir}all.json"
-    else
-      jq -c '{v: 1, meta: ., rounds: {}}' "${dir}meta.json" >"${dir}all.json"
-    fi
+  local s g line dir files sport_name
+  local -A seen=()
+  for s in $SPORTS; do
+    case $s in 1) sport_name="Baloncesto" ;; 2) sport_name="Fútbol sala" ;; 3) sport_name="Voleibol" ;; esac
+    jq -c --argjson s "$s" --arg sn "$sport_name" '
+      ([.matches[]] | group_by(.g) | map({key: (.[0].g | tostring), value: map({at, m})}) | from_entries) as $by
+      | .groups | to_entries[] | .key as $g
+      | {g: $g, info: {groupId: ($g | tonumber), ref: {groupId: ($g | tonumber), sportId: $s, competitionId: .value.c, categoryId: .value.k},
+          group: {name: .value.gn, competition: .value.cn, category: .value.kn, sport: $sn}}, sched: ($by[$g] // [])}' \
+      "$D/state/sched-$s.json" >"$WORK/split-$s.jsonl"
+    while IFS= read -r line; do
+      g=${line#\{\"g\":\"}; g=${g%%\"*} # each line starts {"g":"<id>",
+      seen[$g]=1
+      dir=$(gdir "$g")
+      mkdir -p "$dir"
+      printf '%s\n' "$line" >"$WORK/split.json"
+      files=("$dir"/r*.json)
+      [[ -f ${files[0]} ]] || files=(/dev/null)
+      local meta="$dir/meta.json"
+      [[ -f $meta ]] || meta=/dev/null
+      jq -cn --slurpfile x "$WORK/split.json" --slurpfile meta "$meta" '
+        ($meta[0] // {}) as $m
+        | {v: 1, info: $x[0].info, meta: $m, sched: $x[0].sched,
+           rounds: (reduce inputs as $r ({}; if any(($m.rounds // [])[]; .id == $r.Id) then .[$r.Id | tostring] = $r else . end))}' \
+        "${files[@]}" >"$dir/all.json"
+    done <"$WORK/split-$s.jsonl"
+    # The catalogue: every group of the sport with its teams.
+    jq -c --argjson s "$s" '
+      ([.matches[]] | group_by(.g) | map({key: (.[0].g | tostring), value: ([.[] | .m
+          | ({id: .IdEquipoLocal, name: .EquipoLocal, crest: .URLEscudoEquipoLocal}, {id: .IdEquipoVisitante, name: .EquipoVisitante, crest: .URLEscudoEquipoVisitante})]
+          | map(select((.id // 0) > 0)) | unique_by(.id))}) | from_entries) as $teams
+      | {v: 1, sportId: $s, competitions: ([.groups | to_entries[] | .value + {g: (.key | tonumber)}] | group_by(.c)
+          | map({id: .[0].c, name: .[0].cn, categories: (group_by(.k)
+              | map({id: .[0].k, name: .[0].kn, groups: map({id: .g, name: .gn, teams: ($teams[.g | tostring] // [])})}))}))}' \
+      "$D/state/sched-$s.json" >"$D/catalog/$s.json"
   done
+  # Groups read on their own but gone from the grouped calendars keep their all.json from their pages.
+  for dir in "$D"/groups/*/; do
+    g=$(basename "$dir")
+    [[ -n ${seen[$g]:-} || ! -f $dir/meta.json ]] && continue
+    files=("$dir"r*.json)
+    [[ -f ${files[0]} ]] || files=(/dev/null)
+    jq -cn --slurpfile meta "${dir}meta.json" '$meta[0] as $m | {v: 1, info: {groupId: $m.groupId, ref: $m.ref, group: $m.group}, meta: $m, sched: [],
+      rounds: (reduce inputs as $r ({}; if any($m.rounds[]; .id == $r.Id) then .[$r.Id | tostring] = $r else . end))}' "${files[@]}" >"${dir}all.json"
+  done
+  # index.json: small. Every group with its ids and when it last changed (newestFetch: the app skips
+  # what it already has); the same shape the first app builds read.
   local metas=("$D"/groups/*/meta.json)
-  [[ -f ${metas[0]} ]] || metas=(/dev/null) # never let jq wait on stdin
-  jq -cn --argjson ms "$(now_ms)" --arg at "$(date -u +%FT%TZ)" --arg next "$(next_run)" \
-    --argjson req "$REQ" --argjson stored "$STORED" --argjson refused "$REFUSED" --arg stopped "$STOPPED" \
-    --slurpfile groups "$WORK/groups.json" '
-    [inputs] as $metas
+  [[ -f ${metas[0]} ]] || metas=(/dev/null)
+  jq -cn --argjson ms "$(now_ms)" --arg at "$(date -u +%FT%TZ)" --arg next "$(next_run)" --argjson req "$REQ" \
+    --argjson tiers "$(for t in boot t1 t2 t5 t3 t4; do printf '"%s":%s\n' "$t" "${TIER_REQ[$t]}"; done | paste -sd, | sed 's/^/{/; s/$/}/')" \
+    --argjson stored "$STORED" --argjson refused "$REFUSED" --arg stopped "$STOPPED" \
+    --slurpfile s1 "$D/state/sched-1.json" --slurpfile s2 "$D/state/sched-2.json" --slurpfile s3 "$D/state/sched-3.json" '
+    ([inputs | {key: (.groupId | tostring), value: ([.fetchedAt[]?] | max // 0)}] | from_entries) as $pages
+    | ([($s1[0], $s2[0], $s3[0]) | .matches[] | {g: (.g | tostring), at}] | group_by(.g) | map({key: .[0].g, value: (map(.at) | max)}) | from_entries) as $sched
     | {v: 1, generatedAt: $at, generatedMs: $ms, nextRun: $next, refreshHours: 3, refreshFromHour: 7, refreshToHour: 19,
-       groups: [$groups[0].groups[] | . as $g | ($metas | map(select(.groupId == $g.groupId)) | first) as $m
-         | {groupId, sportId, competitionId, categoryId, label: (.label // ""),
-            newestFetch: ([$m.fetchedAt[]?] | max // 0), lastAttempt: ($m.lastAttempt // 0), lastError: ($m.lastError // null)}],
-       lastRun: {requests: $req, stored: $stored, refused: $refused, stopped: (if $stopped == "" then null else $stopped end)}}' \
+       sports: {"1": ($s1[0].groups | length), "2": ($s2[0].groups | length), "3": ($s3[0].groups | length)},
+       groups: ([[1, $s1[0]], [2, $s2[0]], [3, $s3[0]]] | map(.[0] as $s | .[1].groups | to_entries[]
+         | {groupId: (.key | tonumber), sportId: $s, competitionId: .value.c, categoryId: .value.k,
+            newestFetch: ([$pages[.key] // 0, $sched[.key] // 0] | max)}) | sort_by(.groupId)),
+       lastRun: {requests: $req, tiers: $tiers, stored: $stored, refused: $refused, stopped: (if $stopped == "" then null else $stopped end)}}' \
     "${metas[@]}" >"$D/index.json"
   cat >"$WORK/data/README.md" <<'EOF'
 # JDCM data
 
 What the JDCM web app (https://makensi.es/jdcm) reads: the public JSON of
-juegosdeportivos.ecmadrid.org for the groups in `pwa/groups.json` of https://github.com/olemoudi/jdcm,
-read by a small device at home (`pwa/pi/jdcm-fetch.sh`) and force-pushed here as one commit every run.
-Never edit it by hand.
+juegosdeportivos.ecmadrid.org for every group of the competition, read by a small device at home
+(`pwa/pi/jdcm-fetch.sh` in https://github.com/olemoudi/jdcm) and force-pushed here as one commit
+every run. Never edit it by hand.
 
-- `v1/index.json`: the groups, when the data was published, the last run.
-- `v1/groups/<id>/r<round>.json`: one round as the site sent it (its matches), kept only if plausible.
-- `v1/groups/<id>/meta.json`: the round list, when each round was read, refusals, the last error.
-- `v1/groups/<id>/all.json`: meta and rounds together (what the app downloads).
-- `v1/catalog/<sport>.json`: every group and team of a sport (to add a child).
+- `v1/index.json`: when it was published, groups per sport, when each group last changed, the last run.
+- `v1/state/sched-<sport>.json`: every group's matches from the grouped calendars (dates, venues,
+  states; no scores), when each round number was read, refusals.
+- `v1/groups/<id>/r<round>.json`: one round as the group's own page sent it (with scores).
+- `v1/groups/<id>/meta.json`: that group's round list, when each round was read, its final results.
+- `v1/groups/<id>/all.json`: all of the above for one group (what the app downloads).
+- `v1/catalog/<sport>.json`: every competition, category, group and team of a sport.
 EOF
 }
 
@@ -516,19 +665,20 @@ next_run() {
 }
 
 write_last_run() {
-  printf 'at=%s\nrequests=%s\nanswers=%s\nstored=%s\nrefused=%s\npublished=%s\nstopped=%s\n' \
-    "$(date '+%F %T')" "$REQ" "$OK_ANSWERS" "$STORED" "$REFUSED" "$1" "$STOPPED" >"$STATE_DIR/last-run"
+  printf 'at=%s\nrequests=%s\ntiers=boot:%s now:%s results:%s backfill:%s daily:%s weekly:%s\nanswers=%s\nstored=%s\nrefused=%s\npublished=%s\nstopped=%s\n' \
+    "$(date '+%F %T')" "$REQ" "${TIER_REQ[boot]}" "${TIER_REQ[t1]}" "${TIER_REQ[t2]}" "${TIER_REQ[t5]}" "${TIER_REQ[t3]}" "${TIER_REQ[t4]}" \
+    "$OK_ANSWERS" "$STORED" "$REFUSED" "$1" "$STOPPED" >"$STATE_DIR/last-run"
 }
 
-# One commit, force-pushed: the history of jdcm-data never grows.
+# One commit with no parent, built in the clone of the previous one: the push sends only the files
+# that changed, and the history of jdcm-data never grows.
 publish_data() {
-  local dir="$WORK/data"
-  rm -rf "$dir/.git"
-  git -C "$dir" init -q -b main
+  local dir="$WORK/data" tree commit
   git -C "$dir" add -A
-  git -C "$dir" -c user.name="JDCM fetch" -c user.email="jdcm-fetch@users.noreply.github.com" \
-    commit -q -m "data $(date -u +%FT%TZ): $REQ requests, $STORED stored"
-  if git -C "$dir" push -q --force "$DATA_REMOTE" HEAD:refs/heads/main 2>"$WORK/git.err"; then
+  tree=$(git -C "$dir" write-tree)
+  commit=$(git -C "$dir" -c user.name="JDCM fetch" -c user.email="jdcm-fetch@users.noreply.github.com" \
+    commit-tree "$tree" -m "data $(date -u +%FT%TZ): $REQ requests, $STORED stored")
+  if git -C "$dir" push -q --force "$DATA_REMOTE" "$commit:refs/heads/main" 2>"$WORK/git.err"; then
     log "published to $DATA_REMOTE"
   else
     log "E push failed: $(tr '\n' ' ' < "$WORK/git.err" | head -c 300)"

@@ -1,7 +1,0 @@
-{
-  "comment": "Groups the home fetcher (pwa/pi/jdcm-fetch.sh) reads for the web app, from this file on main at every run. Each costs about 1 request a run (5 runs a day) plus a few once a day; a run allows 60. To add one, paste the line from the web app's request (a message or a GitHub issue). label is for humans only.",
-  "groups": [
-    { "groupId": 177, "sportId": 2, "competitionId": 113, "categoryId": 306, "label": "Fútbol sala · Alevín mixto · Grupo 1" },
-    { "groupId": 139, "sportId": 1, "competitionId": 107, "categoryId": 212, "label": "Baloncesto · Alevín masculino · Grupo 1" }
-  ]
-}

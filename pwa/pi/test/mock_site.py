@@ -1,12 +1,21 @@
 """A stand-in for juegosdeportivos.ecmadrid.org, for testing jdcm-fetch.sh without touching the site.
 
-Serves the real answers in core/src/test/resources/fixtures: group 177's first matchday as its
-current round, group 139's basketball page, the futsal grouped calendar. Other rounds are made up
-from the group's round list (the base matches, moved to that round's date, still pending). A mode
-file switches the behaviour: ok, html (a login page), down (503), shrink (one match per round).
+Built from the real futsal grouped calendar of round 1 (core/src/test/resources/fixtures/
+calendario_agrupado.json: Alevín mixto, groups 177-184, five matches each). Round numbers 2-9 are
+the same matches a week later each; group G's round N has id base(G) + N - 1, as on the site.
+The grouped endpoint serves every group of a round number without scores; a group's own page
+serves its round with the previous and next ones and, for played matches, their scores. Basketball
+and volleyball are empty. A mode file (space-separated words) changes the behaviour:
+  played   round 1 has been played: timed matches "Disputado sin Incidencias", untimed rained off
+  late     the group pages have no scores yet (the results are not entered)
+  rain     group 177's first match of round 2 is rained off (in the grouped calendar only)
+  gshrink  the grouped calendar lists only group 177
+  wrong    a group's page answers another round than the one asked (JSON, but odd)
+  down     every request answers 503;  html  every request answers a login page
 Every request is logged with its time, to check the politeness of the fetcher.
 """
 import copy
+import datetime
 import http.server
 import json
 import os
@@ -15,45 +24,63 @@ import time
 import urllib.parse
 
 FIX, MODE_FILE, LOG, PORT = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4])
+ROUNDS = 9
+GROUPED = json.loads(json.loads(open(os.path.join(FIX, "calendario_agrupado.json"), encoding="utf-8").read()))
+COMP = GROUPED[0]
+GROUPS = {g["IdGrupo"]: g for g in COMP["Categorias"][0]["Grupos"]}
+BASE = {gid: g["Enfrentamientos"][0]["IdJornada"] for gid, g in GROUPS.items()}
 
 
-def inner(name):
-    return json.loads(json.loads(open(os.path.join(FIX, name), encoding="utf-8").read()))
+def modes():
+    return set(open(MODE_FILE).read().split()) if os.path.exists(MODE_FILE) else set()
 
 
-BASES = {177: inner("j1_g177_resultado.json"), 139: inner("jornada_grupo_baloncesto.json")}
-GROUPED = {2: open(os.path.join(FIX, "calendario_agrupado.json"), encoding="utf-8").read()}
+def shift(fecha, weeks):
+    d = datetime.date.fromisoformat(fecha[:10]) + datetime.timedelta(days=7 * weeks)
+    return d.isoformat() + fecha[10:]
 
 
-def made_up(base, entry, shrink):
-    """Round `entry` of the base page's list, with the base matches moved to its date."""
-    if entry["Id"] == base["jornada"]["Id"] and not shrink:
-        return base["jornada"]
-    j = copy.deepcopy(base["jornada"])
-    j.update(Id=entry["Id"], NumeroJornada=entry["NumeroJornada"], Fecha=entry["Fecha"])
-    day = entry["Fecha"][:10]
-    matches = []
-    for i, m in enumerate(base["jornada"]["Enfrentamientos"]):
-        m = copy.deepcopy(m)
-        m.update(Id=100000 + entry["Id"] * 10 + i, IdJornada=entry["Id"], NumeroJornada=entry["NumeroJornada"],
-                 FechaHora=day + (m.get("FechaHora") or "T00:00:00")[10:], IdEstadoPartido=0, EstadoPartido="Pendiente de Jugar",
-                 ResultadoEquipoLocal=None, ResultadoEquipoVisitante=None, IdEquipoGanador=0)
-        matches.append(m)
-    j["Enfrentamientos"] = matches[:1] if shrink else matches
-    return j
+def matches(gid, n, m, with_scores):
+    out = []
+    for i, base in enumerate(GROUPS[gid]["Enfrentamientos"]):
+        x = copy.deepcopy(base)
+        x.update(Id=base["Id"] + (n - 1) * 1000, IdJornada=BASE[gid] + n - 1, NumeroJornada=n, FechaHora=shift(base["FechaHora"], n - 1))
+        if n == 1 and "played" in m:
+            if x["FechaHora"][11:16] == "00:00":
+                x.update(IdEstadoPartido=6, EstadoPartido="No Celebrado/Incompleto")
+            else:
+                x.update(IdEstadoPartido=11, EstadoPartido="Disputado sin Incidencias")
+        if n == 2 and gid == 177 and i == 0 and "rain" in m and not with_scores:
+            x.update(IdEstadoPartido=6, EstadoPartido="No Celebrado/Incompleto")
+        if with_scores:
+            played = x["IdEstadoPartido"] == 11 and "late" not in m
+            h, a = (x["Id"] % 4, x["Id"] % 3) if played else (None, None)
+            x.update(ResultadoEquipoLocal=h, ResultadoEquipoVisitante=a, Cerrado=False,
+                     IdEquipoGanador=(x["IdEquipoLocal"] if h > a else x["IdEquipoVisitante"] if a > h else 0) if played else 0)
+        out.append(x)
+    return out
 
 
-def round_page(group, round_id, shrink):
-    base = BASES[group]
-    rounds = sorted(base["jornadas"], key=lambda r: r["NumeroJornada"])
-    if round_id == 0 and not shrink:
-        return base
-    current = round_id or base["jornada"]["Id"]
-    idx = next(i for i, r in enumerate(rounds) if r["Id"] == current)
-    page = {"jornada": made_up(base, rounds[idx], shrink), "jornadas": base["jornadas"]}
-    page["previous"] = made_up(base, rounds[idx - 1], shrink) if idx > 0 else {"Id": 0}
-    page["next"] = made_up(base, rounds[idx + 1], shrink) if idx + 1 < len(rounds) else {"Id": 0}
-    return page
+def round_obj(gid, n, m):
+    return {"Id": BASE[gid] + n - 1, "NumeroJornada": n, "Fecha": shift("2026-11-14T00:00:00", n - 1),
+            "IdGrupo": gid, "Enfrentamientos": matches(gid, n, m, True)}
+
+
+def group_page(gid, round_id, m):
+    n = 2 if round_id == 0 else round_id - BASE[gid] + 1
+    jornadas = [{"Id": BASE[gid] + k - 1, "NumeroJornada": k, "Fecha": shift("2026-11-14T00:00:00", k - 1)} for k in range(1, ROUNDS + 1)]
+    return {"previous": round_obj(gid, n - 1, m) if n > 1 else {"Id": 0}, "jornada": round_obj(gid, n, m),
+            "next": round_obj(gid, n + 1, m) if n < ROUNDS else {"Id": 0}, "jornadas": jornadas}
+
+
+def grouped(sport, n, m):
+    if sport != 2 or not 1 <= n <= ROUNDS:
+        return []
+    c = copy.deepcopy(COMP)
+    c["Categorias"][0]["Grupos"] = [
+        {"IdGrupo": gid, "Grupo": g["Grupo"], "Enfrentamientos": matches(gid, n, m, False)}
+        for gid, g in GROUPS.items() if "gshrink" not in m or gid == 177]
+    return [c]
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -65,17 +92,20 @@ class Handler(http.server.BaseHTTPRequestHandler):
         q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
         with open(LOG, "a") as f:
             f.write(f"{time.time():.3f} {url.path} {json.dumps(q, sort_keys=True)} {self.headers.get('User-Agent')}\n")
-        mode = open(MODE_FILE).read().strip() if os.path.exists(MODE_FILE) else "ok"
-        if mode == "down":
+        m = modes()
+        if "down" in m:
             return self.send(503, "unavailable", "text/plain")
-        if mode == "html":
+        if "html" in m:
             return self.send(200, "<!DOCTYPE html><html>marcaPaginaInicioSesion</html>", "text/html")
         if url.path.endswith("ObtenerDatosJornadaGrupo"):
-            page = round_page(int(q["IdGrupo"]), int(q["IdJornada"]), mode == "shrink")
-            return self.send(200, json.dumps(json.dumps(page, ensure_ascii=False)), "application/json")
-        if url.path.endswith("ObtenerCalendarioAgrupado"):
-            return self.send(200, GROUPED.get(int(q["IdDeporte"]), json.dumps("[]")), "application/json")
-        self.send(404, "not found", "text/plain")
+            body = group_page(int(q["IdGrupo"]), int(q["IdJornada"]), m)
+            if "wrong" in m:
+                body["jornada"]["Id"] = 1
+        elif url.path.endswith("ObtenerCalendarioAgrupado"):
+            body = grouped(int(q["IdDeporte"]), int(q["NumeroJornada"]), m)
+        else:
+            return self.send(404, "not found", "text/plain")
+        self.send(200, json.dumps(json.dumps(body, ensure_ascii=False)), "application/json")
 
     def send(self, code, body, ctype):
         data = body.encode("utf-8")

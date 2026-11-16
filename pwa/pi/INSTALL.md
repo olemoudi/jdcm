@@ -2,9 +2,10 @@
 
 La web oficial no deja que un navegador lea sus datos y solo responde a conexiones de casa en
 España (los servidores de GitHub no llegan). Por eso una Raspberry Pi en casa lee la web cinco
-veces al día y publica los datos en `olemoudi/jdcm-data`, de donde los lee la web app
-(https://makensi.es/jdcm). Es un script de bash (curl, jq y git): no compila nada y vale cualquier
-Raspberry Pi con Raspberry Pi OS, de 32 o de 64 bits.
+veces al día y publica los datos de **todos los grupos** (unos 109, de los tres deportes) en
+`olemoudi/jdcm-data`, de donde los lee la web app (https://makensi.es/jdcm). No hay que configurar
+grupos: las familias eligen cualquier equipo. Es un script de bash (curl, jq y git): no compila
+nada y vale cualquier Raspberry Pi con Raspberry Pi OS, de 32 o de 64 bits.
 
 ## Instalar
 
@@ -39,9 +40,11 @@ Raspberry Pi con Raspberry Pi OS, de 32 o de 64 bits.
 
 ## Uso diario
 
-9. **Añadir un grupo:** pega la línea de la petición (llega por mensaje o como issue) en
-   `pwa/groups.json` del repo `jdcm`, en `main`. La siguiente lectura lo recoge; en la Pi no hay
-   que tocar nada.
+9. **Cuánto pide a la web:** en cada lectura, el calendario de toda la jornada en juego (unas 6–9
+   peticiones) y, solo para los grupos con un partido ya jugado sin resultado, la página de ese grupo;
+   una vez al día, las tres semanas siguientes; una vez a la semana, el resto de la temporada. Como
+   mucho 150 peticiones y 8 minutos por lectura, espaciadas 1,5 s. La primera vez lee todos los
+   grupos (unas 140 peticiones). El registro dice cuántas usó cada parte («requests=…»).
 10. **Actualizar el lector:** vuelve a descargar y ejecutar `install.sh` (paso 2). Conserva la
     clave, el registro y las lecturas programadas.
 11. **La tarjeta SD:** el lector trabaja en memoria (`/run/user`), su registro rota solo (como
@@ -52,11 +55,11 @@ Raspberry Pi con Raspberry Pi OS, de 32 o de 64 bits.
 
 12. **Fin de temporada:** sin partidos, puedes dejarla (cinco lecturas al día, poca cosa) o
     pararla: `systemctl --user disable --now jdcm-fetch.timer`.
-13. **Temporada nueva:** los grupos cambian de número. Cuando la web oficial publique los
-    calendarios, pon los grupos nuevos en `pwa/groups.json` (las familias los piden desde la web
-    app al añadir a su hijo), reactiva las lecturas con
-    `systemctl --user enable --now jdcm-fetch.timer` y lanza una completa:
-    `~/.local/share/jdcm-fetch/jdcm-fetch.sh --now --full`.
+13. **Temporada nueva:** cuando la web oficial publique los calendarios nuevos, reactiva las
+    lecturas con `systemctl --user enable --now jdcm-fetch.timer`. Los grupos y equipos nuevos
+    aparecen solos (salen de los calendarios de la web). Conviene empezar con datos limpios: pide
+    que vacíen `jdcm-data` (o borra su rama `main`) y lanza una lectura:
+    `~/.local/share/jdcm-fetch/jdcm-fetch.sh --now`.
 
 ## Si algo falla
 
