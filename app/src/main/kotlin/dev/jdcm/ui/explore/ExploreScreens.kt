@@ -328,12 +328,13 @@ fun GroupedRoundScreen(c: AppContainer, route: GroupedRoundRoute, onBack: () -> 
                     val list = load.value
                     if (list.isEmpty()) item { Text(stringResource(R.string.no_matches_round), Modifier.padding(16.dp), color = JdcmColors.extra.muted) }
                     // One lazy item per group: a sport's whole round is ~170 matches, composed only as they scroll in.
-                    list.forEach { comp ->
-                        comp.categories.forEach { cat ->
+                    // Keys from the site's ids, deduplicated: a repeated entry would crash the list ("key already used").
+                    list.distinctBy { it.competitionId }.forEach { comp ->
+                        comp.categories.distinctBy { it.categoryId }.forEach { cat ->
                             item(key = "h-${comp.competitionId}-${cat.categoryId}") {
                                 SectionHeader(comp.competition.lowercase().replaceFirstChar { it.titlecase() }, cat.name.takeIf { it != comp.competition })
                             }
-                            items(cat.groups, key = { "g-${it.groupId}" }) { g ->
+                            items(cat.groups.distinctBy { it.groupId }, key = { "g-${comp.competitionId}-${cat.categoryId}-${it.groupId}" }) { g ->
                                 val gref = GroupRef(g.groupId, route.sportId, comp.competitionId, cat.categoryId)
                                 Column {
                                     Row(

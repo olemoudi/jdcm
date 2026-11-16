@@ -54,4 +54,24 @@ class RemindersTest {
         val due = Reminders.nextDue(listOf(kid), snap(m(1, LocalDateTime.of(2026, 11, 13, 18, 0))), 20, LocalDateTime.of(2026, 11, 11, 9, 0), emptySet())
         assertEquals(LocalDateTime.of(2026, 11, 12, 20, 0), due?.first)
     }
+
+    @Test
+    fun `a saturday match already reminded does not hide a sunday replay's reminder`() {
+        val sat = m(1, LocalDateTime.of(2026, 11, 14, 18, 0))
+        val sun = m(2, LocalDateTime.of(2026, 11, 15, 11, 0))
+        val due = Reminders.nextDue(listOf(kid), snap(sat, sun), 20, LocalDateTime.of(2026, 11, 14, 19, 0), setOf(Reminders.key(kid, sat)))
+        assertEquals(LocalDateTime.of(2026, 11, 14, 20, 0), due?.first)
+        assertEquals(2, due?.second?.single()?.second?.id)
+    }
+
+    @Test
+    fun `only reminders whose eve has come are posted, never one for a match today`() {
+        val today = m(1, LocalDateTime.of(2026, 11, 13, 19, 0))
+        val tomorrow = m(2, LocalDateTime.of(2026, 11, 14, 10, 30))
+        val now = LocalDateTime.of(2026, 11, 13, 20, 0)
+        val other = kid.copy(id = "kid-0002-bbbb", teamId = 1)
+        assertEquals(emptyList<Any>(), Reminders.dueNow(listOf(kid), snap(today), 20, now, emptySet()))
+        assertEquals(listOf(2), Reminders.dueNow(listOf(other), snap(tomorrow), 20, now, emptySet()).map { it.second.id })
+        assertEquals(emptyList<Any>(), Reminders.dueNow(listOf(other), snap(tomorrow), 20, now.minusHours(2), emptySet()), "not yet")
+    }
 }

@@ -35,6 +35,8 @@ data class SyncStatus(
     val error: String? = null,
     val offline: Boolean = false,
     val errorAtMs: Long = 0,
+    /** The failure was the site as a whole (5xx, 429, a refusal), not an odd answer about one round. */
+    val siteWide: Boolean = false,
 )
 
 enum class SyncMode {
@@ -96,8 +98,14 @@ class Repository(
         // A group that never loaded (its first fetch failed) is retried after a short pause, not
         // after the full gate: a child added while offline must not wait hours. A clock that was
         // ahead (negative age) never blocks.
-        val gate = if (before?.rounds.isNullOrEmpty()) minOf(limit, EMPTY_RETRY_MS) else limit
-        if (mode != SyncMode.FORCE && before != null && sinceAttempt in 0 until gate) return@withLock SyncOutcome.FRESH
+        val gate = when {
+            // Pull to refresh, pulled again and again: once per half minute is enough for anyone
+            // ("Retry" after a failure waits only a few seconds, or the button would seem dead).
+            mode == SyncMode.FORCE -> if (statusFlow.value[ref.groupId]?.error != null) 5_000L else FORCE_MIN_GAP_MS
+            before?.rounds.isNullOrEmpty() -> minOf(limit, EMPTY_RETRY_MS)
+            else -> limit
+        }
+        if (before != null && sinceAttempt in 0 until gate) return@withLock SyncOutcome.FRESH
 
         val tag = "#${ref.groupId}"
         var snap = (before ?: GroupSnapshot(Group(ref.groupId, ""), ref.sportId, ref.competitionId, ref.categoryId)).copy(lastAttemptMs = startedMs)
@@ -114,6 +122,7 @@ class Repository(
             val todo = RefreshPolicy.roundsToFetch(snap, now, nowMs(), limit)
             DiagLog.i(TAG, "sync $tag start mode=$mode reason=$reason due=${todo.size}/${snap.rounds.size} sinceAttempt=${sinceAttempt / 60_000}min")
             var done = 0
+            var oddInARow = 0
             for (r in todo) {
                 setStatus(ref.groupId) { SyncStatus(running = true, done = done, total = todo.size) }
                 done++
@@ -128,6 +137,7 @@ class Repository(
                 asked++
                 try {
                     snap = fetchInto(snap, ref, r.id)
+                    oddInARow = 0
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -139,6 +149,11 @@ class Repository(
                     val roundSpecific = e is UnexpectedResponse || e.cause is UnexpectedResponse
                     DiagLog.w(TAG, "sync $tag round #${r.id} failed offline=$offline roundSpecific=$roundSpecific ${e.javaClass.simpleName}: ${e.message?.take(60)}")
                     if (!roundSpecific) break
+                    // Two odd answers in a row are the site (a login wall, an error page), not two rounds.
+                    if (++oddInARow >= 2) {
+                        DiagLog.w(TAG, "sync $tag: $oddInARow odd answers in a row; the rest next time")
+                        break
+                    }
                 }
             }
         } catch (e: CancellationException) {
@@ -154,7 +169,10 @@ class Repository(
                 runCatching { cache.put(snap) }.onFailure { DiagLog.w(TAG, "sync $tag could not save: ${it.javaClass.simpleName}") }
                 val err = lastError
                 setStatus(ref.groupId) {
-                    if (err != null && (offline || failed == asked)) SyncStatus(error = err.message ?: err.javaClass.simpleName, offline = offline, errorAtMs = nowMs())
+                    if (err != null && (offline || failed == asked)) {
+                        val siteWide = !(err is UnexpectedResponse || err.cause is UnexpectedResponse)
+                        SyncStatus(error = err.message ?: err.javaClass.simpleName, offline = offline, errorAtMs = nowMs(), siteWide = siteWide)
+                    }
                     else SyncStatus()
                 }
                 if (asked > failed) {
@@ -188,10 +206,19 @@ class Repository(
         return merged.snapshot
     }
 
-    /** Followed teams' changes in this group, handed to the notifier. */
+    /**
+     * Followed teams' changes in this group, handed to the notifier. Compared only against data
+     * fetched in the last [NEWS_BASE_MAX_AGE_MS]: a group cached weeks ago by the explorer or the
+     * team search (then followed), or a phone that was off for days, has no news, only old results.
+     */
     private suspend fun report(before: GroupSnapshot?, after: GroupSnapshot) {
         val following = kids.current().filter { it.groupId == after.group.id }
         if (following.isEmpty()) return
+        val baseAge = before?.let { nowMs() - it.newestFetch }
+        if (baseAge != null && baseAge > NEWS_BASE_MAX_AGE_MS) {
+            DiagLog.i(TAG, "#${after.group.id}: previous data ${baseAge / RefreshPolicy.HOUR} h old; nothing announced")
+            return
+        }
         val changes = MatchChanges.between(before, after, following.map { it.teamId }.toSet(), now())
         if (changes.isEmpty()) return
         DiagLog.i(TAG, "changes #${after.group.id}: " + changes.joinToString { it.javaClass.simpleName + "@" + it.match.id })
@@ -206,8 +233,20 @@ class Repository(
     suspend fun syncKids(mode: SyncMode, reason: String): List<SyncOutcome> = syncKidGroups(null, mode, reason)
 
     /** The followed groups among [groupIds] (all of them when null), one after the other. */
-    suspend fun syncKidGroups(groupIds: Set<Int>?, mode: SyncMode, reason: String): List<SyncOutcome> =
-        kids.current().map { it.ref }.distinctBy { it.groupId }.filter { groupIds == null || it.groupId in groupIds }.map { sync(it, mode, reason) }
+    suspend fun syncKidGroups(groupIds: Set<Int>?, mode: SyncMode, reason: String): List<SyncOutcome> {
+        val refs = kids.current().map { it.ref }.distinctBy { it.groupId }.filter { groupIds == null || it.groupId in groupIds }
+        val out = mutableListOf<SyncOutcome>()
+        for (ref in refs) {
+            val o = sync(ref, mode, reason)
+            out += o
+            // Offline, or the site refusing: the next group would fail the same way, after its retries.
+            if (o == SyncOutcome.FAILED && status.value[ref.groupId]?.let { it.offline || it.siteWide } == true) {
+                DiagLog.i(TAG, "sync stopped after #${ref.groupId}: offline or the site is failing; ${refs.size - out.size} groups next time")
+                break
+            }
+        }
+        return out
+    }
 
     /**
      * Started from a screen but owned by the app: leaving the screen does not cancel it. The
@@ -263,9 +302,12 @@ class Repository(
             val teams = cached?.teams ?: run {
                 val ref = GroupRef(g.id, sportId, competitionId, categoryId)
                 val page = api.round(ref, 0)
-                val snap = (cache.get(g.id) ?: GroupSnapshot(g, sportId, competitionId, categoryId)).merge(page, nowMs(), true).snapshot
-                cache.put(snap)
-                snap.teams
+                // Under the group's lock: a sync of the same group may be writing it right now.
+                lock(g.id).withLock {
+                    val snap = (cache.get(g.id) ?: GroupSnapshot(g, sportId, competitionId, categoryId)).merge(page, nowMs(), true).snapshot
+                    cache.put(snap)
+                    snap.teams
+                }
             }
             teams.forEach { out += TeamInGroup(it, g) }
         }
@@ -279,5 +321,9 @@ class Repository(
         const val SYNC_BUDGET_MS = 3 * 60_000L
         /** A group with nothing loaded yet is tried again after this, whatever the mode's pace. */
         const val EMPTY_RETRY_MS = 10 * 60_000L
+        /** Pull to refresh asks the site at most this often per group. */
+        const val FORCE_MIN_GAP_MS = 30_000L
+        /** Changes are announced only against data at most this old (see [report]). */
+        const val NEWS_BASE_MAX_AGE_MS = 3 * 24 * RefreshPolicy.HOUR
     }
 }

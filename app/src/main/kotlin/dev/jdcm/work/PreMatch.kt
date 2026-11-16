@@ -58,9 +58,11 @@ object PreMatch {
         val c = app.container
         val am = app.getSystemService(AlarmManager::class.java)
         val pi = pending(app)
-        if (!c.settings.state.value.notifyChanges) {
+        // Nobody to tell (change alerts off in the app or in Android): no 16 requests per match for nothing.
+        // Re-armed when the app is shown, so turning alerts back on brings the checks back.
+        if (!wanted(app)) {
             am.cancel(pi)
-            if (c.settings.preMatchAlarmAtMs != 0L) DiagLog.i(TAG, "off: change notifications are off")
+            if (c.settings.preMatchAlarmAtMs != 0L) DiagLog.i(TAG, "off: change notifications are off (app=${c.settings.state.value.notifyChanges} android=${c.notifier.canPost()})")
             c.settings.preMatchAlarmAtMs = 0
             return
         }
@@ -94,7 +96,7 @@ object PreMatch {
         val c = app.container
         val now = LocalDateTime.now(MADRID)
         c.settings.preMatchLastCheckMs = System.currentTimeMillis()
-        val groups = if (c.settings.state.value.notifyChanges) groupsInWindow(app, now) else emptySet()
+        val groups = if (wanted(app)) groupsInWindow(app, now) else emptySet()
         if (groups.isEmpty()) {
             DiagLog.i(TAG, "fired: no match in its last hours")
         } else {
@@ -103,6 +105,8 @@ object PreMatch {
         }
         arm(app)
     }
+
+    private fun wanted(app: JdcmApp): Boolean = app.container.settings.state.value.notifyChanges && app.container.notifier.canPost()
 
     /** Android 12+ asks for a permission (see the manifest); before that exact alarms are free. */
     fun canExact(am: AlarmManager): Boolean =

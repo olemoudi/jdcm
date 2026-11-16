@@ -1,5 +1,7 @@
 package dev.jdcm.ui.home
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -134,7 +136,8 @@ fun HomeScreen(
     ) { pad ->
         when {
             kidsOrNull == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            kids.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad)) {
+            // Scrolls only when it does not fit (text at 200 %, a short phone); centred otherwise.
+            kids.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
                 InstallPermissionBanner(c)
                 Spacer(Modifier.weight(1f))
                 EmptyState(
@@ -409,5 +412,5 @@ fun FooterLinks(links: List<Pair<String, () -> Unit>>) {
 
 fun groupRoute(kid: Kid, tab: Int) = GroupRoute(
     kid.groupId, kid.sportId, kid.competitionId, kid.categoryId,
-    title = kid.groupName, tab = tab, teamId = kid.teamId, kidColor = kid.color, kidName = kid.name,
+    title = kid.groupName, tab = tab, teamId = kid.teamId, kidColor = kid.color, kidId = kid.id,
 )

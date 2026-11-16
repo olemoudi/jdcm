@@ -102,7 +102,7 @@ fun InstallPermissionBanner(c: AppContainer) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
                 Text(stringResource(R.string.ob_updates_title), style = MaterialTheme.typography.titleLarge)
                 Spacer(Modifier.width(4.dp))
-                Text(stringResource(R.string.ob_updates_text), style = MaterialTheme.typography.bodyMedium, color = JdcmColors.extra.muted)
+                Text(stringResource(if (Perms.silentUpdates) R.string.ob_updates_text else R.string.ob_updates_text_tap), style = MaterialTheme.typography.bodyMedium, color = JdcmColors.extra.muted)
                 InstallGuide(granted = granted)
                 Spacer(Modifier.width(8.dp))
                 Button(onClick = { Perms.openInstallSettings(ctx) }, modifier = Modifier.fillMaxWidth().padding(top = 16.dp).heightIn(min = 56.dp)) {

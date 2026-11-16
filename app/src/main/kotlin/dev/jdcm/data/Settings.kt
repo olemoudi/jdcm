@@ -61,7 +61,8 @@ class Settings(context: Context) {
     /** Match ids already reminded, so a reminder is never posted twice (kept short). */
     var remindedMatchIds: Set<String>
         get() = d.getStringSet("reminded", emptySet()).orEmpty()
-        set(v) = d.edit { putStringSet("reminded", v.toList().takeLast(60).toSet()) }
+        // Keys end in the match's date: the 60 newest stay (a set has no order to "take last" by).
+        set(v) = d.edit { putStringSet("reminded", v.sortedBy { it.substringAfterLast(':') }.takeLast(60).toSet()) }
 
     var lastBackgroundSyncMs: Long
         get() = d.getLong("lastBgSync", 0)

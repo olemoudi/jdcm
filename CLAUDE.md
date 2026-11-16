@@ -50,29 +50,46 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   (`PreMatchPolicy`). `work/PreMatch`: one **exact** `setExactAndAllowWhileIdle` alarm (`USE_EXACT_ALARM`;
   an inexact one is held to 2/hour in the "frequent" standby bucket, measured) → expedited one-off
   `SyncWorker` (Android 12+) in `SyncMode.PRE_MATCH`; re-armed with the reminder. Off when change
-  notifications are off. Diagnostics → «Pre-match checks». Verified on the AVD in deep Doze.
+  notifications are off (in the app or in Android). Diagnostics → «Pre-match checks». Verified on the AVD in deep Doze.
+- **Replays**: a rescheduled match keeps its round, so `RefreshPolicy.distanceDays` measures a round by
+  its date *or* any of its matches' own dates (the old round is hot while its replay is near), and
+  `Schedule.matchdayOf` lists a match moved > 3 days from its round on its own weekend.
 
-## Reliability rules (two reviews, 2026-11-09)
+## Reliability rules (reviews 2026-11-09 and 2026-11-16)
 
 - `GroupSnapshot.merge` is defensive: the group id is ours; other groups' matches dropped; a round
-  that shrinks below half is refused unless the same answer repeats; a missing date/venue keeps the
-  held one; a "result" dated in the future is stored as pending; the site's round list is ignored if
-  it lacks the round just fetched and never drops rounds holding results.
-- `Repository.sync` gates on the last *attempt* (`lastAttemptMs`; 10 min for a group never loaded);
-  rounds closest to today first, neighbours from the same answer (`previous`/`next` carry matches);
-  a site-wide failure (5xx, 429, timeout, offline) ends the sync, an odd answer about one round does
-  not; 3-minute budget; save/report/status in `NonCancellable`; reminder re-armed after any fetch.
-  Screens start syncs with `syncInBackground` (app scope), never in their own scope.
-- Notifications: ≤ 3 per child per sync (else one summary), `setOnlyAlertOnce`, ids per kind.
+  that shrinks below half (or to nothing, even from one match) is refused unless the same answer
+  repeats; a missing date/venue keeps the held one; a "result" dated in the future (any state, a
+  "played" one included) is stored as pending with no score; the site's round list is ignored if
+  it lacks the round just fetched and never drops rounds holding results. A score is known only if
+  it is a number; «No Celebrado» counts as a result only with a winner or a score (never a bare 0-0).
+- `Repository.sync` gates on the last *attempt* (`lastAttemptMs`; 10 min for a group never loaded;
+  pull to refresh 30 s, 5 s after a failure); rounds closest to today first, neighbours from the same
+  answer (`previous`/`next` carry matches); a site-wide failure (5xx, 429, timeout, offline) ends the
+  sync and the group loop, an odd answer about one round does not — but two odd answers in a row do
+  (a login wall); odd bodies are retried once, 429 never; 3-minute budget; save/report/status in
+  `NonCancellable`; reminder re-armed after any fetch. Screens start syncs with `syncInBackground`
+  (app scope), never in their own scope. The team search writes groups under the group's lock.
+- Notifications: ≤ 3 per child per sync (else one summary), `setOnlyAlertOnce`, ids per kind; changes
+  only against data < 3 days old (a group cached long ago by the explorer has old results, not news).
+- Eve reminder: each child's first match that is on, not started, not reminded and whose eve is not
+  long gone (`Reminders.candidates`); the alarm posts only what is due (`dueNow`). Boot re-arm holds
+  `goAsync`. Known: siblings in the same match get one notification (ids per match).
+- `KidStore`: read-modify-write under a mutex, disk before memory, write not cancellable, a failed
+  write logged (never a crash). The kid editor's new id is fixed per editor (a double tap can't
+  duplicate a child); forward navigation only from a RESUMED entry (no double push).
 - `JsonFile`: fsync + `.bak`; a corrupt file reads the backup (the children list can't vanish).
+- Crests (Coil) use their own OkHttp dispatcher, one request at a time to the site.
 - Device-only state (`device` prefs: guide done, worker scheduled, reminded, seen) is not backed up.
 - Known limitation: `EcmApi.SEASON_ID` is hard-coded (12 = 2026-27); the explorer and team search need
   a release at the season rollover (July 2027). Followed groups keep working until then.
 
 ## First run
 
-`ui/onboarding/`: welcome → notifications → install permission (drawn guide; without it no updates)
-→ battery (optional) → add the first child. Home's `InstallPermissionBanner` reminds while the
+`ui/onboarding/`: welcome → notifications → install permission (drawn guide; without it no updates;
+on Android 10–11 the text says each update takes one tap — `Perms.silentUpdates`) → battery (optional,
+plus «Pausar actividad si no se usa» off while it applies: a summer unopened would stop updates and
+remove the alerts permission) → add the first child. Home's `InstallPermissionBanner` reminds while the
 install permission is missing ("Más tarde" = 3 days). Navigation after the guide waits for the
 NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm_icon.svg`
 (render with `rsvg-convert` to preview; the vectors in `res/drawable` share its geometry).
@@ -99,7 +116,10 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
   `vX.Y.Z-beta` → **beta** (normal release, production; `releases/latest` = newest beta = the install
   link). Any other tag fails the Release workflow. Phones follow one channel (Settings → Updates) and
   update themselves from `channels/<channel>.json`, which CI commits after each release. A fresh
-  install follows its own build's channel.
+  install follows **beta whatever APK it came from** (owner, 2026-11-16: nobody should have to touch it);
+  the channel is settled once at the first start (`initialChannel`, stored in `updates` prefs). Installs
+  that ran a build before 0.2.3 keep the channel they were on (their build's). To test alphas on a new
+  phone, switch to alpha in Settings → Updates.
 - **Every release is an alpha.** Cut a beta only when the owner says so in words ("promote the alpha
   to beta"). Never offer beta as an option when asking what to cut.
 - To cut an alpha: raise `versionCode` by 1 and set `versionName = "X.Y.Z-alpha"` in

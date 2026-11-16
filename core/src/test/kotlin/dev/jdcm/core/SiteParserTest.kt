@@ -111,4 +111,14 @@ class SiteParserTest {
         val json2 = """{"Id":6,"IdEquipoLocal":1,"IdEquipoVisitante":2,"SolicitudesModificaciones":[{"IdEstadoSolicitud":6}]}"""
         assertTrue(SiteParser.match(kotlinx.serialization.json.Json.parseToJsonElement(json2) as kotlinx.serialization.json.JsonObject)!!.modified)
     }
+
+    @Test
+    fun `a score sent as an empty string is no score`() {
+        val raw = fixture("jornada_grupo.json")
+        val blank = raw.replaceFirst("ResultadoEquipoLocal\\\":0,", "ResultadoEquipoLocal\\\":\\\"\\\",")
+        check(blank != raw) { "fixture changed shape" }
+        val page = SiteParser.roundPage(blank)
+        val all = page.matches + page.neighbours.flatMap { it.second }
+        assertEquals(1, all.count { !it.scoreKnown })
+    }
 }

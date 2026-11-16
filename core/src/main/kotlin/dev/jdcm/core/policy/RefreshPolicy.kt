@@ -3,6 +3,7 @@ package dev.jdcm.core.policy
 import dev.jdcm.core.model.GroupSnapshot
 import dev.jdcm.core.model.Round
 import java.time.DayOfWeek
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import kotlin.math.abs
@@ -47,23 +48,36 @@ object RefreshPolicy {
     const val FAR_MAX_AGE_MS = 24 * HOUR
 
     /** Max age of one round's data, given the caller's pace for the hot ones ([hotMaxAgeMs], 0 = now). */
-    fun maxAgeMs(round: Round, now: LocalDateTime, hotMaxAgeMs: Long): Long {
+    fun maxAgeMs(round: Round, now: LocalDateTime, hotMaxAgeMs: Long): Long =
+        maxAgeMs(round.date?.let { ChronoUnit.DAYS.between(now.toLocalDate(), it) }, hotMaxAgeMs)
+
+    /** The same, for a round [days] away from today (null: undated). */
+    private fun maxAgeMs(days: Long?, hotMaxAgeMs: Long): Long {
         val forced = hotMaxAgeMs <= 0
         val near = if (forced) 0 else maxOf(NEAR_MAX_AGE_MS, hotMaxAgeMs)
         val far = if (forced) NEAR_MAX_AGE_MS else maxOf(FAR_MAX_AGE_MS, hotMaxAgeMs)
-        val d = round.date ?: return near
-        return when (ChronoUnit.DAYS.between(now.toLocalDate(), d)) {
+        return when (days ?: return near) {
             in -HOT_DAYS_BEFORE..HOT_DAYS_AFTER -> hotMaxAgeMs.coerceAtLeast(0)
             in -14L..21L -> near
             else -> far
         }
     }
 
+    /**
+     * How far a round is from today: its own date, or the day of one of its matches moved
+     * elsewhere, whichever is closest. A rained-off match replayed weeks later keeps its old round,
+     * and that round must be watched like this weekend's while the replay is near.
+     */
+    fun distanceDays(snapshot: GroupSnapshot, round: Round, today: LocalDate): Long? =
+        (listOfNotNull(round.date) + snapshot.matches.filter { it.roundId == round.id }.mapNotNull { it.start?.toLocalDate() })
+            .map { ChronoUnit.DAYS.between(today, it) }
+            .minByOrNull { abs(it) }
+
     fun isDue(snapshot: GroupSnapshot, round: Round, now: LocalDateTime, nowMs: Long, hotMaxAgeMs: Long): Boolean {
         val at = snapshot.roundFetchedAt[round.id] ?: return true
         val age = nowMs - at
         // A stamp from the future (the phone's clock was ahead for a while) must not block refreshes.
-        return age < 0 || age >= maxAgeMs(round, now, hotMaxAgeMs)
+        return age < 0 || age >= maxAgeMs(distanceDays(snapshot, round, now.toLocalDate()), hotMaxAgeMs)
     }
 
     /**
@@ -75,6 +89,6 @@ object RefreshPolicy {
         val today = now.toLocalDate()
         return snapshot.rounds
             .filter { isDue(snapshot, it, now, nowMs, hotMaxAgeMs) }
-            .sortedBy { r -> r.date?.let { abs(ChronoUnit.DAYS.between(today, it)) } ?: Long.MAX_VALUE }
+            .sortedBy { r -> distanceDays(snapshot, r, today)?.let(::abs) ?: Long.MAX_VALUE }
     }
 }

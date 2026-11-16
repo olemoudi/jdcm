@@ -91,8 +91,11 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
                     throw e
                 } catch (e: Exception) {
                     val retryable = if (e is SourceException) e.retryable else e is IOException || e is UnexpectedResponse
+                    // An odd body (not JSON: a login page, an error page) is retried once, not twice: it
+                    // was seen once as a hiccup, and when it is the whole site, each retry is wasted.
+                    val attempts = if (e is UnexpectedResponse) 2 else MAX_ATTEMPTS
                     DiagLog.w(TAG, "$name failed attempt=$attempt ${e.javaClass.simpleName}: ${e.message?.take(80)}")
-                    if (!retryable || attempt >= MAX_ATTEMPTS) throw asSourceException(e)
+                    if (!retryable || attempt >= attempts) throw asSourceException(e)
                     delay(wait)
                     wait *= 3
                 }
@@ -109,7 +112,8 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
             .build()
         http.newCall(req).execute().use { resp ->
             // A redirect to /Login (followed by OkHttp) shows up as HTML: the parser reports it.
-            if (!resp.isSuccessful) throw SourceException(offline = false, "HTTP ${resp.code}", retryable = resp.code >= 500 || resp.code == 429)
+            // 429 = "slow down": never asked again at once; the sync ends and the policy's pace applies.
+            if (!resp.isSuccessful) throw SourceException(offline = false, "HTTP ${resp.code}", retryable = resp.code >= 500)
             // The biggest real answer (a sport's whole round) is ~250 KB: anything near the cap is not ours.
             val source = resp.body.source()
             if (source.request(MAX_BODY_BYTES + 1)) throw SourceException(offline = false, "body over ${MAX_BODY_BYTES / 1024} KB", retryable = false)

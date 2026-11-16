@@ -151,7 +151,8 @@ object SiteParser {
             statusName = statusName,
             homeScore = o.int("ResultadoEquipoLocal"),
             awayScore = o.int("ResultadoEquipoVisitante"),
-            scoreKnown = o.prim("ResultadoEquipoLocal") != null && o.prim("ResultadoEquipoVisitante") != null,
+            // A number, or a string holding one: "" or "-" is no score, not a 0.
+            scoreKnown = o.isNumber("ResultadoEquipoLocal") && o.isNumber("ResultadoEquipoVisitante"),
             winnerId = o.int("IdEquipoGanador"),
             partials = (1..5).map { o.str("ResultadoParcial$it").trim() }.filter { it.isNotEmpty() },
             closed = o.bool("Cerrado"),
@@ -206,6 +207,7 @@ object SiteParser {
     private fun JsonObject.prim(k: String): JsonPrimitive? = (this[k] as? JsonPrimitive)?.takeIf { it !is JsonNull }
     private fun JsonObject.str(k: String): String = prim(k)?.contentOrNull.orEmpty()
     private fun JsonObject.int(k: String): Int = prim(k)?.let { it.intOrNull ?: it.contentOrNull?.toDoubleOrNull()?.toInt() } ?: 0
+    private fun JsonObject.isNumber(k: String): Boolean = prim(k)?.let { it.intOrNull != null || it.contentOrNull?.trim()?.toDoubleOrNull() != null } == true
     private fun JsonObject.double(k: String): Double? = prim(k)?.doubleOrNull
     private fun JsonObject.bool(k: String): Boolean = prim(k)?.booleanOrNull ?: false
 

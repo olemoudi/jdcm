@@ -96,10 +96,13 @@ data class GroupSnapshot(
 
     private fun ours(list: List<Match>): List<Match> = list.filter { it.groupId == group.id || it.groupId == 0 }
 
-    /** Taken unless it shrank to less than half of what is held — and even then if it said so last time too. */
+    /**
+     * Taken unless it shrank to less than half of what is held — and even then if it said so last
+     * time too. An empty answer for a round holding even one match is a shrink (a two-team group).
+     */
     private fun acceptRound(round: Round, incoming: Int): Boolean {
         val held = matches.count { it.roundId == round.id }
-        return held < 2 || incoming * 2 >= held || shrinkSeen[round.id] == incoming
+        return held == 0 || incoming * 2 >= held || shrinkSeen[round.id] == incoming
     }
 
     private fun withRound(round: Round, incoming: List<Match>, nowMs: Long, today: LocalDate): GroupSnapshot {
@@ -132,12 +135,13 @@ data class GroupSnapshot(
 
     /**
      * A "result" for a match whose day has not come is not believed (an early closed flag, a stray
-     * score): stored as pending, so the real result is announced and the eve reminder still fires.
+     * score, a "played" state typed into the wrong week): stored as pending — no score, state 0 —
+     * so it is no 0-0 in the table, stays the next match, and the real result is announced.
      */
     private fun unbelievedResult(m: Match, today: LocalDate): Match {
         val day = m.day ?: return m
         if (!day.isAfter(today) || !m.hasResult) return m
-        return m.copy(closed = false, winnerId = 0, homeScore = 0, awayScore = 0)
+        return m.copy(closed = false, winnerId = 0, homeScore = 0, awayScore = 0, scoreKnown = false, statusId = 0, statusName = "")
     }
 
     /**

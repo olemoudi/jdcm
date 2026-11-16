@@ -162,7 +162,7 @@ fun TeamScreen(c: AppContainer, route: TeamRoute, onBack: () -> Unit, onGroup: (
                 DoorRow(
                     title = stringResource(R.string.group_standings),
                     icon = Icons.Outlined.FormatListNumbered,
-                    onClick = { onGroup(GroupRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, snap.group.name, tab = 1, teamId = team.id, kidColor = kid?.color ?: -1, kidName = kid?.name.orEmpty())) },
+                    onClick = { onGroup(GroupRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, snap.group.name, tab = 1, teamId = team.id, kidColor = kid?.color ?: -1, kidId = kid?.id.orEmpty())) },
                 )
                 FreshnessLine(status[route.groupId], snap.newestFetch)
                 Spacer(Modifier.height(24.dp))

@@ -89,9 +89,22 @@ interface UpdatePrefs {
     suspend fun setLastCheckMs(ms: Long)
 }
 
-/** SharedPreferences-backed [UpdatePrefs]. [defaultChannel]: BETA for everybody; ALPHA for an owner-only app. */
+/** SharedPreferences-backed [UpdatePrefs]. [defaultChannel]: only for a stored value that does not parse. */
 class SharedPrefsUpdatePrefs(context: Context, private val defaultChannel: UpdateChannel = UpdateChannel.BETA) : UpdatePrefs {
     private val p = context.applicationContext.getSharedPreferences("updates", Context.MODE_PRIVATE)
+
+    /**
+     * Stores the followed channel the first time the app runs, if nobody picked one yet ([initial] decides, see
+     * [initialChannel]). Synchronous and before [Updates.init]: no check may run on an undecided channel.
+     * Returns what it stored, or null when a channel was already there (chosen, settled or restored from a backup).
+     */
+    fun settleChannel(initial: () -> UpdateChannel): UpdateChannel? {
+        if (p.getString("channel", null) != null) return null
+        val c = initial()
+        p.edit(commit = true) { putString("channel", c.name) }
+        return c
+    }
+
     override suspend fun channel() = runCatching { UpdateChannel.valueOf(p.getString("channel", null)!!) }.getOrDefault(defaultChannel)
     override suspend fun setChannel(c: UpdateChannel) = p.edit { putString("channel", c.name) }
     override suspend fun wifiOnly() = p.getBoolean("wifiOnly", false)

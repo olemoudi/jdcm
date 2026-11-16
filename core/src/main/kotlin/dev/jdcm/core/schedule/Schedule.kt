@@ -7,6 +7,7 @@ import dev.jdcm.core.model.MatchStatus
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 
 /** What a team has coming and what it has done, as a family reads it. */
@@ -33,8 +34,19 @@ object Schedule {
         else -> day.with(TemporalAdjusters.nextOrSame(DayOfWeek.SATURDAY))
     }
 
-    /** The matchday a match is listed under: its round's weekend, else its own. */
-    fun matchdayOf(m: Match): LocalDate? = (m.roundDate ?: m.day)?.let(::weekendOf)
+    /**
+     * The matchday a match is listed under: its round's weekend, else its own — and its own when
+     * it was moved more than [MOVED_DAYS] days away from its round (a rained-off match replayed
+     * weeks later keeps its round but is played, and must be shown, on its new weekend).
+     */
+    fun matchdayOf(m: Match): LocalDate? {
+        val own = m.start?.toLocalDate()
+        val round = m.roundDate
+        val day = if (own != null && round != null && kotlin.math.abs(ChronoUnit.DAYS.between(round, own)) > MOVED_DAYS) own else round ?: m.day
+        return day?.let(::weekendOf)
+    }
+
+    private const val MOVED_DAYS = 3L
 
     /** Distinct matchdays (Saturdays) of these groups, ascending. */
     fun matchdays(snapshots: Collection<GroupSnapshot>): List<LocalDate> =

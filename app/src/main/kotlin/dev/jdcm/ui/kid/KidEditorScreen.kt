@@ -1,5 +1,7 @@
 package dev.jdcm.ui.kid
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
@@ -87,6 +89,7 @@ import dev.jdcm.ui.explore.rememberLoad
 import dev.jdcm.ui.nav.KidEditorRoute
 import dev.jdcm.ui.theme.JdcmColors
 import dev.jdcm.ui.theme.kidColor
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import java.text.Normalizer
 import java.util.UUID
@@ -112,13 +115,19 @@ fun KidEditorScreen(c: AppContainer, route: KidEditorRoute, onDone: () -> Unit, 
     var competition by remember { mutableStateOf<Competition?>(null) }
     var category by remember { mutableStateOf<Category?>(null) }
     var changingTeam by rememberSaveable { mutableStateOf(route.kidId == null && route.presetTeamId == 0) }
+    /** The stored child was copied into the fields once; after a rotation or process death the user's edits stand. */
+    var seeded by rememberSaveable { mutableStateOf(false) }
+    /** A new child's id, fixed for this editor: saving twice (a double tap) replaces, never duplicates. */
+    val newId = rememberSaveable { UUID.randomUUID().toString() }
+    var saving by remember { mutableStateOf(false) }
 
     LaunchedEffect(route.kidId) {
         val kids = c.kids.current()
         if (color < 0) color = (0 until Notifier.KID_COLORS.size).firstOrNull { i -> kids.none { it.color == i } } ?: kids.size
         route.kidId?.let { id ->
             existing = kids.firstOrNull { it.id == id }
-            existing?.let { if (name.isEmpty()) name = it.name; color = it.color; sportId = it.sportId }
+            if (existing == null) DiagLog.w("Kids", "editing #${id.take(8)}: not in the list (deleted?)")
+            existing?.takeIf { !seeded }?.let { name = it.name; color = it.color; sportId = it.sportId; seeded = true }
             loaded = true
         }
     }
@@ -134,6 +143,8 @@ fun KidEditorScreen(c: AppContainer, route: KidEditorRoute, onDone: () -> Unit, 
     BackHandler(enabled = step != Step.NAME) { back() }
 
     fun save(kid: Kid) {
+        if (saving) return
+        saving = true
         scope.launch {
             c.kids.save(kid)
             DiagLog.i("Kids", "saved #${kid.id.take(8)} group=#${kid.groupId} team=#${kid.teamId} new=${existing == null}")
@@ -149,7 +160,7 @@ fun KidEditorScreen(c: AppContainer, route: KidEditorRoute, onDone: () -> Unit, 
         val kind = SportKind.of(sportId)
         save(
             Kid(
-                id = existing?.id ?: UUID.randomUUID().toString(),
+                id = existing?.id ?: newId,
                 name = name.trim(),
                 color = color.coerceAtLeast(0),
                 sportId = sportId,
@@ -205,6 +216,7 @@ fun KidEditorScreen(c: AppContainer, route: KidEditorRoute, onDone: () -> Unit, 
                                 val snap = c.repository.load(route.presetGroupId)
                                 val team = snap?.team(route.presetTeamId)
                                 if (snap != null && team != null) saveWithTeam(TeamInGroup(team, snap.group), null, null)
+                                else DiagLog.w("Kids", "preset team #${route.presetTeamId} not in group #${route.presetGroupId} (cached=${snap != null}): not saved")
                             }
                             else -> step = Step.SPORT
                         }
@@ -238,7 +250,8 @@ private fun NameStep(
     onNext: () -> Unit,
     onChangeTeam: () -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().padding(20.dp)) {
+    // Scrolls when it does not fit (text at 200 %, the keyboard up on a short phone): Save stays reachable.
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text(stringResource(R.string.kid_name_question), style = MaterialTheme.typography.titleLarge)
         Spacer(Modifier.height(6.dp))
         Text(stringResource(R.string.kid_name_hint), style = MaterialTheme.typography.bodyMedium, color = JdcmColors.extra.muted)
@@ -320,15 +333,20 @@ private fun CategoryStep(c: AppContainer, sportId: Int, onPick: (Competition, Ca
                     list.forEachIndexed { i, comp ->
                         if (i > 0) Hairline()
                         Row(
-                            Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(enabled = picking == null) {
+                            // While categories load, one tap; once a competition shows its categories, another may be picked.
+                            Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable(enabled = picking == null || choices.isNotEmpty()) {
                                 picking = comp
+                                choices = emptyList()
                                 failed = false
                                 scope.launch {
                                     try {
                                         val cats = c.repository.categories(comp.id)
                                         if (cats.size == 1) onPick(comp, cats.single()) else choices = cats
                                         if (cats.isEmpty()) failed = true
+                                    } catch (e: CancellationException) {
+                                        throw e
                                     } catch (e: Exception) {
+                                        DiagLog.w("Kids", "categories of competition #${comp.id} failed", e)
                                         failed = true
                                     } finally {
                                         if (choices.isEmpty()) picking = null
@@ -399,7 +417,7 @@ private fun TeamStep(c: AppContainer, sportId: Int, comp: Competition, cat: Cate
             val shown = if (q.isBlank()) all else all.filter { fold(it.team.name).contains(q) }
             LazyColumn(Modifier.fillMaxSize()) {
                 if (shown.isEmpty()) item { Text(stringResource(R.string.no_team_found), Modifier.padding(20.dp), color = JdcmColors.extra.muted) }
-                items(shown, key = { "${it.group.id}-${it.team.id}" }) { t ->
+                items(shown.distinctBy { it.group.id to it.team.id }, key = { "${it.group.id}-${it.team.id}" }) { t ->
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 60.dp).clickable { onPick(t) }.padding(horizontal = 16.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically,

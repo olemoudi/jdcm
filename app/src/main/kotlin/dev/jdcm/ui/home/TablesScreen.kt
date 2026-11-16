@@ -1,5 +1,7 @@
 package dev.jdcm.ui.home
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -76,7 +78,7 @@ fun TablesScreen(c: AppContainer, onSettings: () -> Unit, onAddKid: () -> Unit, 
     ) { pad ->
         when {
             kidsOrNull == null -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            kids.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad)) {
+            kids.isEmpty() -> Column(Modifier.fillMaxSize().padding(pad).verticalScroll(rememberScrollState())) {
                 EmptyState(
                     Icons.Filled.FormatListNumbered,
                     stringResource(R.string.tables_empty_title),

@@ -97,6 +97,8 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
         c.repository.syncInBackground(ref, SyncMode.IF_STALE, "group screen")
     }
     val accent = route.kidColor.takeIf { it >= 0 }?.let(::kidColor)
+    val kids by c.kids.kids.collectAsState()
+    val kidName = kids?.firstOrNull { it.id == route.kidId && route.kidId.isNotEmpty() }?.name.orEmpty()
     val kind = SportKind.of(route.sportId, snap?.group?.sport)
     val actions = LocalActions.current
 
@@ -137,7 +139,7 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
                 if (snap == null || snap.rounds.isEmpty()) {
                     LazyColumn(Modifier.fillMaxSize()) { item { dev.jdcm.ui.components.NotLoadedYet(status[route.groupId], onRetry = { c.repository.syncInBackground(ref, SyncMode.FORCE, "retry") }) } }
                 } else when (tab) {
-                    0 -> RoundsTab(snap, ref, route.teamId, accent, route.kidName, status[route.groupId])
+                    0 -> RoundsTab(snap, ref, route.teamId, accent, kidName, status[route.groupId])
                     1 -> LazyColumn(Modifier.fillMaxSize()) {
                         item {
                             Spacer(Modifier.height(8.dp))

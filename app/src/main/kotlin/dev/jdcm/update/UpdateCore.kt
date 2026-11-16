@@ -32,6 +32,16 @@ enum class UpdateChannel(val suffix: String, val file: String) {
  */
 fun belongsToChannel(versionName: String, channel: UpdateChannel): Boolean = versionName.endsWith(channel.suffix)
 
+/**
+ * The channel a phone follows until someone picks one in Settings, decided ONCE at the first start and stored. A fresh
+ * install follows BETA whatever APK it came from: a parent who taps the top entry of the releases page (an alpha) must
+ * not end up testing. [ranBefore]: this install already ran a build from before 0.2.3, when the default was the build's
+ * own channel — it keeps following the channel it was on ([buildVersionName] is that channel's build, since updates
+ * only ever install a build of the followed channel).
+ */
+fun initialChannel(ranBefore: Boolean, buildVersionName: String): UpdateChannel =
+    if (ranBefore && belongsToChannel(buildVersionName, UpdateChannel.ALPHA)) UpdateChannel.ALPHA else UpdateChannel.BETA
+
 /** `channels/<alpha|beta>.json`, written by release.yml only, after the asset is verified uploaded. */
 @Serializable
 data class ChannelManifest(

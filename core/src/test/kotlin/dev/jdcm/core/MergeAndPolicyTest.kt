@@ -1,5 +1,6 @@
 package dev.jdcm.core
 
+import dev.jdcm.core.model.MatchStatus
 import dev.jdcm.core.changes.MatchChange
 import dev.jdcm.core.changes.MatchChanges
 import dev.jdcm.core.model.Group
@@ -176,5 +177,42 @@ class MergeAndPolicyTest {
     fun `a fetch stamp from the future does not block a refresh`() {
         val s = snapshot(listOf(match(1, a, b)), listOf(r1)).copy(roundFetchedAt = mapOf(101 to 10 * RefreshPolicy.HOUR))
         assertTrue(RefreshPolicy.isDue(s, r1, thursday, 5 * RefreshPolicy.HOUR, 50 * RefreshPolicy.MINUTE))
+    }
+
+    @Test
+    fun `a played state typed into next week's match is stored as pending, never a 0-0`() {
+        val nextWeek = LocalDateTime.of(2026, 11, 21, 10, 30)
+        val held = snapshot(listOf(match(1, a, b, start = nextWeek, round = 2)), listOf(r1, r2))
+        val odd = held.merge(page(r2, match(1, a, b, status = "Disputado sin Incidencias", statusId = 11, start = nextWeek, round = 2)), sunday, false)
+        val m = odd.snapshot.matches.single()
+        assertFalse(m.hasResult)
+        assertFalse(m.scoreKnown)
+        assertEquals(MatchStatus.SCHEDULED, m.status)
+    }
+
+    @Test
+    fun `an empty answer for a round holding one match is refused once, believed the second time`() {
+        val one = snapshot(listOf(match(1, a, b, round = 1), match(3, a, c, round = 2)), listOf(r1, r2))
+        val first = one.merge(page(r1), 5, false)
+        assertEquals(listOf(101), first.rejected)
+        assertTrue(first.snapshot.matches.any { it.id == 1 })
+        assertEquals(listOf(101), first.snapshot.merge(page(r1), 6, false).accepted)
+    }
+
+    @Test
+    fun `a rained-off match closed at 0-0 is no result, one ruled with a score is`() {
+        assertFalse(match(1, a, b, status = "No Celebrado/Incompleto", statusId = 6, closed = true).hasResult)
+        assertTrue(match(1, a, b, 3, 0, status = "No Celebrado/Incompleto", statusId = 6, closed = true).hasResult)
+    }
+
+    @Test
+    fun `the old round of a match replayed this weekend is refreshed at this weekend's pace`() {
+        val now = LocalDateTime.of(2026, 12, 12, 8, 0)
+        val nowMs = java.time.ZonedDateTime.of(now, dev.jdcm.core.model.MADRID).toInstant().toEpochMilli()
+        val stamp = mapOf(101 to nowMs - 20 * RefreshPolicy.MINUTE)
+        val replay = snapshot(listOf(match(1, a, b, round = 1).copy(start = LocalDateTime.of(2026, 12, 12, 10, 0))), listOf(r1)).copy(roundFetchedAt = stamp)
+        assertTrue(RefreshPolicy.isDue(replay, r1, now, nowMs, 15 * RefreshPolicy.MINUTE))
+        val plain = snapshot(listOf(match(1, a, b, round = 1)), listOf(r1)).copy(roundFetchedAt = stamp)
+        assertFalse(RefreshPolicy.isDue(plain, r1, now, nowMs, 15 * RefreshPolicy.MINUTE), "a round 4 weeks old is a far one")
     }
 }

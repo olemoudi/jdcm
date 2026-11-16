@@ -97,4 +97,12 @@ class ChangesAndScheduleTest {
         assertTrue(RefreshPolicy.isMatchWindow(LocalDateTime.of(2026, 11, 15, 23, 0)))
         assertFalse(RefreshPolicy.isMatchWindow(LocalDateTime.of(2026, 11, 16, 15, 0)))
     }
+
+    @Test
+    fun `a match replayed weeks later is listed on its own weekend, a sunday one with its round`() {
+        val replay = match(1, team(1), team(2)).copy(start = LocalDateTime.of(2026, 12, 13, 11, 0))
+        assertEquals(java.time.LocalDate.of(2026, 12, 12), Schedule.matchdayOf(replay))
+        val sunday = match(2, team(1), team(2)).copy(start = LocalDateTime.of(2026, 11, 15, 11, 0))
+        assertEquals(java.time.LocalDate.of(2026, 11, 14), Schedule.matchdayOf(sunday))
+    }
 }

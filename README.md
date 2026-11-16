@@ -27,8 +27,9 @@ itself, silently.
 
 <img src="docs/install-qr.png" width="220" alt="QR code of the install link">
 
-Two channels: **beta** (stable; the link above, the default) and **alpha** (testing, every build;
-Ajustes → Actualizaciones).
+Two channels: **beta** (stable; every install follows it by default, whatever APK it came from) and
+**alpha** (testing, every build; Ajustes → Actualizaciones). On Android 10 and 11 each update asks for
+one tap on a notification; from Android 12 they install silently.
 
 ## Privacy
 

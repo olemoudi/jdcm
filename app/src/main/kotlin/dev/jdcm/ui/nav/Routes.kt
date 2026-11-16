@@ -24,7 +24,8 @@ data class GroupRoute(
     /** The followed team to highlight, if any. */
     val teamId: Int = 0,
     val kidColor: Int = -1,
-    val kidName: String = "",
+    /** The child whose team it is (an id: a route can end up in a crash's message, a name must not). */
+    val kidId: String = "",
 )
 
 @Serializable

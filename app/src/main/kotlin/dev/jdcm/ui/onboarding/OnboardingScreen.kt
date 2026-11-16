@@ -1,6 +1,7 @@
 package dev.jdcm.ui.onboarding
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.outlined.SportsSoccer
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -51,6 +53,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -64,11 +67,13 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import dev.jdcm.AppContainer
 import dev.jdcm.R
 import dev.jdcm.diag.DiagLog
 import dev.jdcm.ui.theme.JdcmColors
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private enum class Step { WELCOME, NOTIFICATIONS, UPDATES, BATTERY, DONE }
 
@@ -108,8 +113,8 @@ fun OnboardingScreen(c: AppContainer, hasKids: Boolean, onFinish: (addKid: Boole
                     Step.UPDATES -> Page(
                         icon = Icons.Filled.SystemUpdate,
                         title = stringResource(R.string.ob_updates_title),
-                        text = stringResource(R.string.ob_updates_text),
-                        done = if (install) stringResource(R.string.ob_updates_done) else null,
+                        text = stringResource(if (Perms.silentUpdates) R.string.ob_updates_text else R.string.ob_updates_text_tap),
+                        done = if (install) stringResource(if (Perms.silentUpdates) R.string.ob_updates_done else R.string.ob_updates_done_tap) else null,
                         primary = if (install) stringResource(R.string.next) to { go(Step.BATTERY) }
                         else stringResource(R.string.ob_updates_open) to { Perms.openInstallSettings(ctx) },
                         secondary = if (install) null else stringResource(R.string.ob_not_now) to { go(Step.BATTERY) },
@@ -122,7 +127,7 @@ fun OnboardingScreen(c: AppContainer, hasKids: Boolean, onFinish: (addKid: Boole
                         primary = if (battery) stringResource(R.string.next) to { go(Step.DONE) }
                         else stringResource(R.string.ob_battery_allow) to { Perms.askBatteryUnrestricted(ctx) },
                         secondary = if (battery) null else stringResource(R.string.ob_not_now) to { go(Step.DONE) },
-                    )
+                    ) { PauseIfUnusedItem() }
                     Step.DONE -> Page(
                         icon = Icons.Filled.CheckCircle,
                         title = stringResource(R.string.ob_done_title),
@@ -250,9 +255,62 @@ fun InstallGuide(granted: Boolean) {
             }
             Spacer(Modifier.height(12.dp))
             Warning(stringResource(R.string.ob_updates_warning))
-        } else {
+        } else if (Perms.silentUpdates) {
             Spacer(Modifier.height(12.dp))
             Text(stringResource(R.string.ob_updates_first_note), style = MaterialTheme.typography.bodyMedium, color = JdcmColors.extra.muted, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/**
+ * The battery page's second switch: "Pause app activity if unused". JDCM sits unopened all summer, and three months
+ * later Android would have stopped its checks and updates and taken its alerts permission. Shown only while it
+ * applies; read again whenever the screen comes back from the system page.
+ */
+@Composable
+private fun PauseIfUnusedItem() {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var pauses by remember { mutableStateOf<Boolean?>(null) }
+    var seenOn by rememberSaveable { mutableStateOf(false) }
+    LifecycleResumeEffect(Unit) {
+        val job = scope.launch {
+            val now = Perms.pausesIfUnused(ctx)
+            if (now == true) seenOn = true
+            if (now != pauses) DiagLog.i("UI", "pause-if-unused=$now")
+            pauses = now
+        }
+        onPauseOrDispose { job.cancel() }
+    }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { }
+    when {
+        pauses == true -> Column(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                    .padding(16.dp),
+            ) {
+                Text(stringResource(R.string.ob_unused_title), style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text(stringResource(R.string.ob_unused_text), style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(
+                    onClick = {
+                        val i = Perms.pauseIfUnusedIntent(ctx)
+                        if (i == null) return@OutlinedButton
+                        try {
+                            launcher.launch(i)
+                        } catch (e: ActivityNotFoundException) {
+                            DiagLog.w("UI", "cannot open the pause-if-unused page", e)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.ob_unused_open)) }
+            }
+        }
+        // Turned off here, just now: say it worked.
+        pauses == false && seenOn -> Row(Modifier.padding(top = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.CheckCircle, null, tint = JdcmColors.extra.win)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.ob_unused_done), style = MaterialTheme.typography.titleMedium, color = JdcmColors.extra.win)
         }
     }
 }

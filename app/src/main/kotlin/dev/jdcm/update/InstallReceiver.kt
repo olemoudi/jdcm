@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
+import android.os.Build
 import androidx.core.content.IntentCompat
 import dev.jdcm.R
 import dev.jdcm.diag.DiagLog
@@ -21,6 +22,10 @@ class InstallReceiver : BroadcastReceiver() {
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
                 val confirm = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java) ?: return
+                // 12+ should have installed it silently: the phone (an OEM installer, Play Protect) asked for a tap anyway.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    DiagLog.w("Update", "silent install refused by the system; the user must confirm (session $sessionId)")
+                }
                 UpdateCenter.report(UpdateUiState.PendingConfirmation(UpdateCenter.channelOffer.value))
                 // Always a notification carrying the system's dialog: background activity starts are blocked since
                 // Android 10, and a dialog popping over whatever the user is doing is hostile (rwilco 0.68.0).

@@ -17,7 +17,6 @@ import dev.jdcm.work.PreMatch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
 
@@ -31,6 +30,27 @@ object Reminders {
     private const val TAG = "Reminder"
     private const val REQUEST = 4401
 
+    /**
+     * Each child's next match that gets a reminder, with its moment (the eve at [hour]): on, not
+     * started, not reminded yet, and its eve not long gone (the time was set tonight, or the app
+     * was just installed) — such a match is skipped for the one after it, never blocks it. A
+     * Saturday match already reminded must not hide a Sunday replay's reminder.
+     */
+    fun candidates(
+        kids: List<Kid>,
+        snapshots: Map<Int, GroupSnapshot>,
+        hour: Int,
+        now: LocalDateTime,
+        reminded: Set<String>,
+    ): List<Triple<LocalDateTime, Kid, Match>> = kids.mapNotNull { kid ->
+        val s = snapshots[kid.groupId] ?: return@mapNotNull null
+        Schedule.upcoming(s, kid.teamId, now).asSequence()
+            .filter { m -> m.isOn && m.day != null && key(kid, m) !in reminded }
+            .filter { m -> !(m.timeKnown && m.start != null && !m.start!!.isAfter(now)) }
+            .map { m -> Triple(m.day!!.minusDays(1).atTime(hour, 0), kid, m) }
+            .firstOrNull { it.first.isAfter(now.minusMinutes(LATE_MINUTES)) }
+    }
+
     /** The next moment a reminder is due for any of [kids], with the matches it covers. */
     fun nextDue(
         kids: List<Kid>,
@@ -39,29 +59,35 @@ object Reminders {
         now: LocalDateTime,
         reminded: Set<String>,
     ): Pair<LocalDateTime, List<Pair<Kid, Match>>>? {
-        val candidates = kids.mapNotNull { kid ->
-            val s = snapshots[kid.groupId] ?: return@mapNotNull null
-            val m = Schedule.upcoming(s, kid.teamId, now).firstOrNull { it.isOn && it.day != null } ?: return@mapNotNull null
-            if (key(kid, m) in reminded) return@mapNotNull null
-            val at = m.day!!.minusDays(1).atTime(hour, 0)
-            // Too late for the eve (the time was set tonight, or the app was just installed): no reminder.
-            if (!at.isAfter(now.minusMinutes(90))) return@mapNotNull null
-            if (m.timeKnown && m.start != null && !m.start!!.isAfter(now)) return@mapNotNull null
-            Triple(at, kid, m)
-        }
+        val candidates = candidates(kids, snapshots, hour, now, reminded)
         val first = candidates.minByOrNull { it.first }?.first ?: return null
         return first to candidates.filter { it.first == first }.map { it.second to it.third }
     }
+
+    /** What to post now: the candidates whose eve has come (the alarm may ring a little early). */
+    fun dueNow(
+        kids: List<Kid>,
+        snapshots: Map<Int, GroupSnapshot>,
+        hour: Int,
+        now: LocalDateTime,
+        reminded: Set<String>,
+    ): List<Pair<Kid, Match>> =
+        candidates(kids, snapshots, hour, now, reminded).filter { !it.first.isAfter(now.plusMinutes(1)) }.map { it.second to it.third }
+
+    /** An inexact alarm comes up to an hour late; past this, the eve is gone and no reminder is better than a wrong one. */
+    private const val LATE_MINUTES = 90L
 
     fun key(kid: Kid, m: Match) = "${kid.id.take(8)}:${m.id}:${m.day}"
 
     /** Both of the app's alarms: this reminder and the pre-match checks ([PreMatch]). */
     fun rearm(context: Context) {
         val app = context.applicationContext as JdcmApp
-        CoroutineScope(Dispatchers.IO).launch {
-            runCatching { arm(app) }.onFailure { DiagLog.e(TAG, "rearm failed", it) }
-            runCatching { PreMatch.arm(app) }.onFailure { DiagLog.e("PreMatch", "rearm failed", it) }
-        }
+        CoroutineScope(Dispatchers.IO).launch { armBoth(app) }
+    }
+
+    suspend fun armBoth(app: JdcmApp) {
+        runCatching { arm(app) }.onFailure { DiagLog.e(TAG, "rearm failed", it) }
+        runCatching { PreMatch.arm(app) }.onFailure { DiagLog.e("PreMatch", "rearm failed", it) }
     }
 
     /** Not cancelled, not played: a match the child turns up to (a rained-off one gets no reminder). */
@@ -90,7 +116,7 @@ object Reminders {
         DiagLog.i(TAG, "armed for ${due.first} matches=${due.second.map { it.second.id }}")
     }
 
-    /** The alarm went off: post what is due (within the next ~36 h), remember it, arm the next. */
+    /** The alarm went off: post what is due now (its eve has come), remember it, arm the next. */
     suspend fun fire(app: JdcmApp) {
         val c = app.container
         val s = c.settings.state.value
@@ -98,14 +124,10 @@ object Reminders {
         val kids = c.kids.current()
         kids.forEach { c.repository.load(it.groupId) }
         val reminded = c.settings.remindedMatchIds.toMutableSet()
-        val tomorrow: LocalDate = now.toLocalDate().plusDays(1)
         if (s.notifyReminder) {
-            for (kid in kids) {
-                val snap = c.repository.snapshots.value[kid.groupId] ?: continue
-                val m = Schedule.upcoming(snap, kid.teamId, now).firstOrNull { it.isOn && it.day != null } ?: continue
-                // Due: the match is tomorrow, or later today when the alarm was late past midnight.
-                if (m.day != tomorrow && m.day != now.toLocalDate()) continue
-                if (key(kid, m) in reminded) continue
+            val due = dueNow(kids, c.repository.snapshots.value, s.reminderHour, now, reminded)
+            if (due.isEmpty()) DiagLog.i(TAG, "fired: nothing due now")
+            for ((kid, m) in due) {
                 c.notifier.reminder(kid, m)
                 reminded += key(kid, m)
             }
@@ -139,10 +161,18 @@ class ReminderReceiver : BroadcastReceiver() {
     }
 }
 
-/** Alarms do not survive a reboot or an update: re-arm. */
+/** Alarms do not survive a reboot: re-arm (after an update too, to be sure). Held with goAsync: at boot an idle process dies fast. */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         DiagLog.i("Reminder", "rearm after ${intent.action?.substringAfterLast('.')}")
-        Reminders.rearm(context)
+        val app = context.applicationContext as JdcmApp
+        val done = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                Reminders.armBoth(app)
+            } finally {
+                done.finish()
+            }
+        }
     }
 }

@@ -24,7 +24,7 @@ import dev.jdcm.diag.DiagLog
 import dev.jdcm.notify.Notifier
 import dev.jdcm.notify.Reminders
 import dev.jdcm.update.SharedPrefsUpdatePrefs
-import dev.jdcm.update.UpdateChannel
+import dev.jdcm.update.initialChannel
 import dev.jdcm.update.Updates
 import dev.jdcm.update.PublicRepoSource
 import dev.jdcm.work.SyncWorker
@@ -33,6 +33,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import okhttp3.Dispatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 
@@ -65,10 +66,14 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
         container = AppContainer(this)
         container.notifier.ensureChannels()
 
-        // The build's own channel by default: an alpha APK installed by hand follows alpha, the
-        // install link's beta follows beta. Settings → Updates can switch either way.
-        val defaultChannel = if (BuildConfig.VERSION_NAME.endsWith(UpdateChannel.ALPHA.suffix)) UpdateChannel.ALPHA else UpdateChannel.BETA
-        Updates.init(this, SharedPrefsUpdatePrefs(this, defaultChannel), PublicRepoSource(container.http), container.http)
+        // Beta for every fresh install, whatever APK it came from; nobody has to touch it. Settings →
+        // Updates switches to alpha. Read before scheduledForVersion is written below: non-zero means
+        // this install already ran (it is device-only state, never restored from a backup).
+        val updatePrefs = SharedPrefsUpdatePrefs(this)
+        val ranBefore = container.settings.scheduledForVersion != 0
+        updatePrefs.settleChannel { initialChannel(ranBefore, BuildConfig.VERSION_NAME) }
+            ?.let { DiagLog.i("Update", "channel settled: ${it.name.lowercase()} (ranBefore=$ranBefore)") }
+        Updates.init(this, updatePrefs, PublicRepoSource(container.http), container.http)
 
         // Re-enqueued only when the build changed: a background start (the worker itself) costs no
         // WorkManager write. Alarms are re-armed when the app is shown, on boot and after an update.
@@ -96,7 +101,8 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
     override fun newImageLoader(context: PlatformContext): ImageLoader = ImageLoader.Builder(context)
         .components {
             add(OkHttpNetworkFetcherFactory(callFactory = {
-                container.http.newBuilder().addInterceptor { chain ->
+                // Its own dispatcher, one request at a time: crests come from the competition's site too.
+                container.http.newBuilder().dispatcher(Dispatcher().apply { maxRequestsPerHost = 1 }).addInterceptor { chain ->
                     chain.proceed(chain.request().newBuilder().header("User-Agent", EcmApi.USER_AGENT).build())
                 }.build()
             }))

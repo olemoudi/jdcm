@@ -184,6 +184,9 @@ data class Match(
             return when (status) {
                 MatchStatus.POSTPONED, MatchStatus.UNSCHEDULED -> false
                 MatchStatus.PLAYED -> true
+                // Not held and closed is the minutes of a match that did not happen: only a
+                // ruling (a winner, a forfeit score) makes it a result, never a bare 0-0.
+                MatchStatus.NOT_HELD -> winnerId != 0 || homeScore + awayScore > 0
                 else -> closed || winnerId != 0 || homeScore + awayScore > 0
             }
         }

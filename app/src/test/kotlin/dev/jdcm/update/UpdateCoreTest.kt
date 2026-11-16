@@ -106,4 +106,17 @@ class UpdateCoreTest {
         assertFalse(m.isNewerThan(42))
         assertFalse(m.copy(apk = "", assetId = 0).isNewerThan(1))
     }
+
+    @Test
+    fun `a fresh install follows beta whatever apk it came from`() {
+        assertEquals(UpdateChannel.BETA, initialChannel(ranBefore = false, buildVersionName = "0.2.3-beta"))
+        assertEquals(UpdateChannel.BETA, initialChannel(ranBefore = false, buildVersionName = "0.2.3-alpha"))
+    }
+
+    @Test
+    fun `an install from before the rule keeps the channel it was on`() {
+        assertEquals(UpdateChannel.ALPHA, initialChannel(ranBefore = true, buildVersionName = "0.2.3-alpha"))
+        assertEquals(UpdateChannel.BETA, initialChannel(ranBefore = true, buildVersionName = "0.2.3-beta"))
+        assertEquals(UpdateChannel.BETA, initialChannel(ranBefore = true, buildVersionName = "0.2.3"))
+    }
 }

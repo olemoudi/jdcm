@@ -38,6 +38,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.lifecycle.Lifecycle
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -98,7 +99,7 @@ val LocalActions = staticCompositionLocalOf<AppActions> { error("no actions") }
 val LocalContainer = staticCompositionLocalOf<AppContainer> { error("no container") }
 
 fun openDirections(ctx: Context, m: Match) {
-    val v = m.venue ?: return
+    val v = m.venue ?: return DiagLog.i("UI", "directions for #${m.id}: no venue")
     val uri = if (v.hasPosition) Uri.parse("geo:${v.lat},${v.lng}?q=${v.lat},${v.lng}(${Uri.encode(v.name)})")
     else Uri.parse("geo:0,0?q=" + Uri.encode(listOf(v.address, v.postcode, v.town).filter { it.isNotBlank() }.joinToString(" ")))
     try {
@@ -106,6 +107,7 @@ fun openDirections(ctx: Context, m: Match) {
     } catch (_: ActivityNotFoundException) {
         // No maps app: the browser's Google Maps (the site's own link) does it.
         if (v.hasPosition) openUrl(ctx, "https://www.google.com/maps/search/?api=1&query=${v.lat},${v.lng}")
+        else DiagLog.w("UI", "directions for #${m.id}: no maps app and no coordinates")
     }
 }
 
@@ -136,6 +138,7 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
             val snap = c.repository.load(open.groupId)
             val kid = c.kids.current().firstOrNull { it.id == open.kidId }
             val m = snap?.matches?.firstOrNull { it.id == open.matchId }
+            if (m == null || snap == null) DiagLog.i("UI", "notification for match #${open.matchId} in #${open.groupId}: not cached any more (cached=${snap != null})")
             if (m != null && snap != null) {
                 sheet = MatchArgs(
                     m, GroupRef(snap.group.id, snap.sportId, snap.competitionId, snap.categoryId),
@@ -161,6 +164,11 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                     addKidAfterOnboarding = addKid
                 }
                 return@CompositionLocalProvider
+            }
+            // Forward navigation only from a settled screen: a double tap on a link (or a tap during
+            // the fade to the next screen) would push the same screen twice, needing two Backs.
+            fun go(route: Any) {
+                if (nav.currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != false) nav.navigate(route)
             }
             val entry by nav.currentBackStackEntryAsState()
             val dest = entry?.destination
@@ -211,35 +219,35 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                     composable<HomeRoute> {
                         HomeScreen(
                             c,
-                            onSettings = { nav.navigate(SettingsRoute) },
-                            onAddKid = { nav.navigate(KidEditorRoute()) },
+                            onSettings = { go(SettingsRoute) },
+                            onAddKid = { go(KidEditorRoute()) },
                             onExplore = { nav.navigate(ExploreRoute) { launchSingleTop = true } },
-                            onGroup = { nav.navigate(it) },
-                            onTeam = { nav.navigate(it) },
+                            onGroup = { go(it) },
+                            onTeam = { go(it) },
                         )
                     }
                     composable<TablesRoute> {
-                        TablesScreen(c, onSettings = { nav.navigate(SettingsRoute) }, onAddKid = { nav.navigate(KidEditorRoute()) }, onTeam = { nav.navigate(it) })
+                        TablesScreen(c, onSettings = { go(SettingsRoute) }, onAddKid = { go(KidEditorRoute()) }, onTeam = { go(it) })
                     }
                     composable<ExploreRoute> {
-                        ExploreScreen(onSport = { nav.navigate(ExploreSportRoute(it)) }, onSettings = { nav.navigate(SettingsRoute) })
+                        ExploreScreen(onSport = { go(ExploreSportRoute(it)) }, onSettings = { go(SettingsRoute) })
                     }
                     composable<ExploreSportRoute> { e ->
                         val r = e.toRoute<ExploreSportRoute>()
-                        ExploreSportScreen(c, r.sportId, onBack = { nav.popBackStack() }, onCompetition = { nav.navigate(it) }, onGrouped = { nav.navigate(it) })
+                        ExploreSportScreen(c, r.sportId, onBack = { nav.popBackStack() }, onCompetition = { go(it) }, onGrouped = { go(it) })
                     }
                     composable<ExploreCompetitionRoute> { e ->
                         val r = e.toRoute<ExploreCompetitionRoute>()
-                        ExploreCompetitionScreen(c, r, onBack = { nav.popBackStack() }, onGroup = { nav.navigate(it) }, onGrouped = { nav.navigate(it) })
+                        ExploreCompetitionScreen(c, r, onBack = { nav.popBackStack() }, onGroup = { go(it) }, onGrouped = { go(it) })
                     }
                     composable<GroupedRoundRoute> { e ->
-                        GroupedRoundScreen(c, e.toRoute(), onBack = { nav.popBackStack() }, onGroup = { nav.navigate(it) })
+                        GroupedRoundScreen(c, e.toRoute(), onBack = { nav.popBackStack() }, onGroup = { go(it) })
                     }
                     composable<GroupRoute> { e ->
-                        GroupScreen(c, e.toRoute(), onBack = { nav.popBackStack() }, onTeam = { nav.navigate(it) })
+                        GroupScreen(c, e.toRoute(), onBack = { nav.popBackStack() }, onTeam = { go(it) })
                     }
                     composable<TeamRoute> { e ->
-                        TeamScreen(c, e.toRoute(), onBack = { nav.popBackStack() }, onGroup = { nav.navigate(it) }, onFollow = { nav.navigate(it) })
+                        TeamScreen(c, e.toRoute(), onBack = { nav.popBackStack() }, onGroup = { go(it) }, onFollow = { go(it) })
                     }
                     composable<KidEditorRoute> { e ->
                         KidEditorScreen(c, e.toRoute(), onDone = {
@@ -250,10 +258,10 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                         SettingsScreen(
                             c,
                             onBack = { nav.popBackStack() },
-                            onAddKid = { nav.navigate(KidEditorRoute()) },
-                            onEditKid = { nav.navigate(KidEditorRoute(kidId = it)) },
-                            onChangelog = { nav.navigate(ChangelogRoute) },
-                            onDiagnostics = { nav.navigate(DiagnosticsRoute) },
+                            onAddKid = { go(KidEditorRoute()) },
+                            onEditKid = { go(KidEditorRoute(kidId = it)) },
+                            onChangelog = { go(ChangelogRoute) },
+                            onDiagnostics = { go(DiagnosticsRoute) },
                         )
                     }
                     composable<ChangelogRoute> { ChangelogScreen(onBack = { nav.popBackStack() }) }
@@ -281,11 +289,11 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                     onDismiss = { sheet = null },
                     onTeam = { ref, teamId ->
                         sheet = null
-                        nav.navigate(TeamRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, teamId))
+                        go(TeamRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, teamId))
                     },
                 )
             }
-            WhatsNewSheet(c, onAll = { nav.navigate(ChangelogRoute) })
+            WhatsNewSheet(c, onAll = { go(ChangelogRoute) })
         }
     }
 }

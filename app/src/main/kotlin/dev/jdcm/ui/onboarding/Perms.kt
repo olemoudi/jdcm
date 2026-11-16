@@ -17,10 +17,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
+import androidx.core.content.IntentCompat
+import androidx.core.content.PackageManagerCompat
+import androidx.core.content.UnusedAppRestrictionsConstants
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.jdcm.diag.DiagLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import java.util.concurrent.TimeUnit
 
 /** What the app needs from Android, read fresh each time (the user changes them in system screens). */
 object Perms {
@@ -34,6 +40,34 @@ object Perms {
 
     fun batteryUnrestricted(ctx: Context): Boolean =
         runCatching { ctx.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName) }.getOrDefault(false)
+
+    /**
+     * Android 12+ installs an update without asking (USER_ACTION_NOT_REQUIRED); on 10 and 11 every update waits for
+     * one tap on its notification. What the guide promises depends on it.
+     */
+    val silentUpdates: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    /**
+     * "Pause app activity if unused" (hibernation): three months unopened — a summer without matches — and Android stops
+     * the app's checks and updates and, on 13+, removes its alerts permission. True while it applies to this app; null
+     * when the phone has no such feature or cannot say. Blocking parts bounded: call from a coroutine.
+     */
+    suspend fun pausesIfUnused(ctx: Context): Boolean? = withContext(Dispatchers.IO) {
+        runCatching {
+            when (PackageManagerCompat.getUnusedAppRestrictionsStatus(ctx).get(2, TimeUnit.SECONDS)) {
+                UnusedAppRestrictionsConstants.API_30_BACKPORT, UnusedAppRestrictionsConstants.API_30,
+                UnusedAppRestrictionsConstants.API_31 -> true
+                UnusedAppRestrictionsConstants.DISABLED -> false
+                else -> null
+            }
+        }.getOrNull()
+    }
+
+    /** The system page holding that switch (App info on 12+); launch it for a result (the API 30 backport needs it). */
+    fun pauseIfUnusedIntent(ctx: Context): Intent? =
+        runCatching { IntentCompat.createManageUnusedAppRestrictionsIntent(ctx, ctx.packageName) }
+            .onFailure { DiagLog.w("UI", "no page for the pause-if-unused switch", it) }
+            .getOrNull()
 
     fun openInstallSettings(ctx: Context) = start(ctx, Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${ctx.packageName}")), "install")
 

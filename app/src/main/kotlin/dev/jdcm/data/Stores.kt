@@ -4,6 +4,7 @@ import android.content.Context
 import dev.jdcm.core.model.GroupSnapshot
 import dev.jdcm.diag.DiagLog
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -152,27 +153,42 @@ class KidStore(context: Context) {
     /** Null until read from disk: Home waits for it instead of flashing the empty state. */
     val kids: StateFlow<List<Kid>?> = mutable.asStateFlow()
 
+    /** Serialises read-modify-write: two quick edits (or a save racing the first load) never lose one. */
+    private val edit = Mutex()
+
     suspend fun load() {
-        if (mutable.value == null) mutable.value = file.read().orEmpty()
+        if (mutable.value != null) return
+        edit.withLock { if (mutable.value == null) mutable.value = file.read().orEmpty() }
     }
 
     suspend fun current(): List<Kid> { load(); return mutable.value.orEmpty() }
 
-    suspend fun save(kid: Kid) {
-        val list = current()
-        val next = if (list.any { it.id == kid.id }) list.map { if (it.id == kid.id) kid else it } else list + kid
-        set(next)
+    suspend fun save(kid: Kid) = change { list ->
+        if (list.any { it.id == kid.id }) list.map { if (it.id == kid.id) kid else it } else list + kid
     }
 
-    suspend fun remove(id: String) = set(current().filterNot { it.id == id })
+    suspend fun remove(id: String) = change { list -> list.filterNot { it.id == id } }
 
-    suspend fun reorder(ids: List<String>) {
-        val byId = current().associateBy { it.id }
-        set(ids.mapNotNull { byId[it] } + current().filter { it.id !in ids })
+    suspend fun reorder(ids: List<String>) = change { list ->
+        val byId = list.associateBy { it.id }
+        ids.mapNotNull { byId[it] } + list.filter { it.id !in ids }
     }
 
-    suspend fun set(list: List<Kid>) {
-        mutable.value = list
-        file.write(list)
+    suspend fun set(list: List<Kid>) = change { list }
+
+    /**
+     * The disk first, then memory, and the write is not cancellable: a screen closing mid-save must
+     * not leave a child deleted on screen that comes back at the next start. A failed write (disk
+     * full) is logged and the list stays as the user made it for this session, never a crash.
+     */
+    private suspend fun change(f: (List<Kid>) -> List<Kid>) {
+        load()
+        withContext(NonCancellable) {
+            edit.withLock {
+                val next = f(mutable.value.orEmpty())
+                runCatching { file.write(next) }.onFailure { DiagLog.e("Store", "kids.json not written", it) }
+                mutable.value = next
+            }
+        }
     }
 }
