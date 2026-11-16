@@ -5,7 +5,7 @@ import { navigate } from '../lib/router'
 import { StandingsTable } from '../components/StandingsTable'
 import { SportIcon } from '../components/Icons'
 import { FlatCard, PrimaryButton } from '../components/ui'
-import { FreshnessLine, GroupPending } from './shared'
+import { FreshnessLine, GroupPending, StaleBanner } from './shared'
 
 /** Every child's group table, one under the other (the app's Clasificación tab). */
 export function TablesScreen() {
@@ -19,6 +19,7 @@ export function TablesScreen() {
       <header className="pt-safe">
         <h1 className="px-4 pb-1 pt-3 text-[28px] font-bold leading-tight">{fmt.t('tab_tables')}</h1>
       </header>
+      {list.length > 0 && <StaleBanner />}
       {list.length === 0 && (
         <div className="px-8 pt-10 text-center">
           <p className="text-[15px] text-text-2">{fmt.t('tables_empty')}</p>

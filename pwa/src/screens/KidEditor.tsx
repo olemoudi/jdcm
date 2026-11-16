@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useData, useFmt, useKids } from '../hooks/app-state'
 import { sportKindOfId, type CatalogCategory, type CatalogCompetition, type CatalogSport, type Team } from '../lib/data'
 import { ageHint, Format } from '../lib/format'
@@ -24,8 +24,8 @@ const SPORT_ORDER = [2, 1, 3] // futsal, basketball, volleyball: the app's order
 
 /**
  * Add or edit a child: name and colour, then sport → age group → (category) → team, searched by
- * school across every group of the category (the catalogue the data job publishes). A team whose
- * group the data job does not follow yet can still be saved, with a way to ask for it.
+ * school across every group of the category (the catalogue the home fetcher publishes). A team whose
+ * group the fetcher does not follow yet can still be saved, with a way to ask for it.
  */
 export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?: number; teamId?: number }) {
   const fmt = useFmt()
@@ -38,7 +38,6 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
   const [pick, setPick] = useState<Pick | null>(null)
   const [query, setQuery] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
-  useEffect(() => { loadCatalog() }, [loadCatalog])
 
   // Opened from a team ("This is my child's team"): the team is known already.
   const preset = useMemo((): Kid | null => {
@@ -53,7 +52,7 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
     }
   }, [groupId, teamId, groups])
 
-  const sport: CatalogSport | undefined = catalog?.sports.find((s) => s.id === pick?.sportId)
+  const sport: CatalogSport | undefined = pick ? catalog[pick.sportId] : undefined
   const ios = installMode(currentEnv(false))
   const steps: Step[] = ['name', 'sport', 'competition', 'team']
   const stepNo = Math.min(steps.length, steps.indexOf(step === 'category' ? 'competition' : step === 'pending' ? 'team' : step) + 1)
@@ -170,8 +169,9 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
     )
   }
 
-  const catalogMissing = !catalog && (
-    <p className="p-6 text-center text-sm text-text-2">{catalogState === 'loading' || catalogState === 'idle' ? fmt.t('catalog_loading') : fmt.t('catalog_error')}</p>
+  const sportState = pick ? catalogState[pick.sportId] : undefined
+  const catalogMissing = !sport && (
+    <p className="p-6 text-center text-sm text-text-2">{sportState === undefined || sportState === 'loading' ? fmt.t('catalog_loading') : fmt.t('catalog_error')}</p>
   )
 
   if (step === 'sport') {
@@ -181,7 +181,7 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
         <h2 className="px-4 pt-4 text-xl font-bold">{fmt.t('kid_sport_question')}</h2>
         <div className="mt-4 space-y-2 px-4">
           {SPORT_ORDER.map((id) => (
-            <button key={id} type="button" onClick={() => { setPick({ sportId: id }); setStep('competition') }}
+            <button key={id} type="button" onClick={() => { loadCatalog(id); setPick({ sportId: id }); setStep('competition') }}
               className="flex min-h-16 w-full items-center gap-4 rounded-xl border border-line bg-card px-4 text-left active:bg-raised">
               <SportIcon kind={sportKindOfId(id)} size={30} className="text-primary" />
               <span className="flex-1 text-[17px] font-semibold">{fmt.t(`sport_${sportKindOfId(id)}` as const)}</span>
@@ -285,7 +285,7 @@ export function KidEditor({ kidId, groupId, teamId }: { kidId?: string; groupId?
     )
   }
 
-  // step === 'pending': the group is not followed by the data job yet.
+  // step === 'pending': the group is not followed by the fetcher yet.
   const req = pick?.team && pick.competition && pick.category && pick.groupId
     ? groupRequest({
         sportId: pick.sportId, sportKind: sportKindOfId(pick.sportId), competitionId: pick.competition.id, competitionName: pick.competition.name,

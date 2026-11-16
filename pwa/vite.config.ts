@@ -13,9 +13,10 @@ const BASE = CHANNEL === 'alpha' ? '/jdcm/alpha/' : '/jdcm/'
 // Paths inside this build's scope that belong to another channel's build.
 const FOREIGN = CHANNEL === 'beta' ? ['/jdcm/alpha/'] : []
 
-// The site sends no CORS headers: the PWA reads the static JSON the data workflow publishes on the
-// `data` branch (.github/workflows/pwa-data.yml). The e2e build points at a local copy.
-const DATA_URL = process.env.VITE_DATA_URL ?? 'https://raw.githubusercontent.com/olemoudi/jdcm/data/'
+// The site sends no CORS headers (and answers only Spanish home connections): a fetcher at home
+// (pwa/pi/jdcm-fetch.sh) publishes its JSON to olemoudi/jdcm-data, read through raw.githubusercontent.com.
+// The e2e build points at a local copy.
+const DATA_URL = process.env.VITE_DATA_URL ?? 'https://raw.githubusercontent.com/olemoudi/jdcm-data/main/'
 // Crests are loaded from the site. The e2e build points elsewhere: tests never reach the site.
 const SITE = process.env.JDCM_SITE_URL ?? 'https://juegosdeportivos.ecmadrid.org'
 

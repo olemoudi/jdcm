@@ -1,4 +1,4 @@
-import { test, expect, addKid, dismissInstallBanner, LUCIA, PABLO } from './fixtures'
+import { test, expect, addKid, dismissInstallBanner, LUCIA, PABLO, NOW } from './fixtures'
 
 // The key screens at iPhone size, for review (pwa/e2e/screenshots/, not committed).
 // Run alone: npx playwright test screenshots --project=iphone-webkit
@@ -55,6 +55,12 @@ test('screenshots of the key screens', async ({ page }, info) => {
   await page.screenshot({ path: shot('13-home-light') })
   await page.goto('/jdcm/alpha/')
   await page.screenshot({ path: shot('14-alpha-first-visit') })
+  await page.evaluate(() => localStorage.setItem('jdcm:beta:theme', 'dark'))
+  await page.clock.setFixedTime(new Date(NOW.getTime() + 27 * 3600_000))
+  await page.goto('/jdcm/')
+  await expect(page.getByTestId('stale-banner')).toBeVisible()
+  await page.screenshot({ path: shot('17-stale-data') })
+  await page.clock.setFixedTime(NOW)
   await page.goto('/jdcm/#/hijo/nuevo')
   await addKid(page, { ...LUCIA, name: 'Marta', search: 'pilar', team: /NUESTRA SEÑORA DEL PILAR "A"/ })
   await page.screenshot({ path: shot('15-group-not-followed') })

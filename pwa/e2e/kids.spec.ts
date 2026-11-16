@@ -1,4 +1,4 @@
-import { test, expect, addKid, dismissInstallBanner, LUCIA, PABLO } from './fixtures'
+import { test, expect, addKid, dismissInstallBanner, LUCIA, PABLO, NOW } from './fixtures'
 
 test.describe('children and their matches', () => {
   test('add a child and see their matchday on Home, from the published data', async ({ page }) => {
@@ -19,7 +19,8 @@ test.describe('children and their matches', () => {
     // The last result stays in sight: she won 10-0 on the first matchday.
     await expect(section.getByTestId('last-result')).toContainText('Ganó 10-0')
     await expect(section).toContainText('1º · 2 pts')
-    await expect(section.getByTestId('freshness')).toContainText('Se actualizan cada ~3 h durante el día (7–22 h)')
+    await expect(section.getByTestId('freshness')).toContainText('Se actualizan cada ~3 h, de 7 a 19 h.')
+    await expect(page.getByTestId('stale-banner')).toHaveCount(0)
 
     // The match sheet: directions, calendar, share.
     await card.getByRole('button').first().click()
@@ -64,5 +65,20 @@ test.describe('children and their matches', () => {
     await expect(pending.getByRole('link', { name: /Pedirlo en GitHub/ })).toHaveAttribute('href', /github\.com\/olemoudi\/jdcm\/issues\/new\?title=.*groupId%22%3A180/)
     await pending.getByRole('button', { name: 'Guardar a Marta' }).click()
     await expect(page.getByTestId('group-pending')).toContainText('Pide que añadan el de Marta')
+  })
+
+  test('data older than 12.5 hours is flagged plainly (the fetcher at home may be off)', async ({ page }) => {
+    await page.goto('/jdcm/')
+    await dismissInstallBanner(page)
+    await addKid(page, LUCIA)
+    await expect(page.getByTestId('stale-banner')).toHaveCount(0)
+    // The data was published on Monday 16 at 21:42; Wednesday at noon nothing newer has come.
+    await page.clock.setFixedTime(new Date(NOW.getTime() + 27 * 3600_000))
+    await page.reload()
+    const banner = page.getByTestId('stale-banner')
+    await expect(banner).toContainText('Datos sin actualizar')
+    await expect(banner).toContainText('Estos datos son de hace 1 d')
+    await expect(banner.getByRole('link', { name: 'Abrir la web oficial' })).toBeVisible()
+    await expect(page.locator('section[data-testid^="kid-"]').getByTestId('freshness').locator('p').first()).toHaveClass(/text-danger/)
   })
 })

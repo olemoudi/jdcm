@@ -1,6 +1,8 @@
-// The JSON the data workflow publishes (pump/src/main/kotlin/dev/jdcm/pump/Output.kt), read
-// defensively: it comes from the network, may be from an older or newer pump, may be half a file
-// or an error page. A malformed match is dropped, not the whole group.
+import { groupedRoundFrom } from '../core/parser'
+
+// What the screens read. The home fetcher (pwa/pi/jdcm-fetch.sh) publishes the site's own JSON to
+// olemoudi/jdcm-data; src/core (a port of the Kotlin core) turns it into these view types. Everything
+// from the network is read defensively: it may be half a file, an error page or a newer schema.
 
 export type Status = 'SCHEDULED' | 'PLAYED' | 'POSTPONED' | 'NOT_HELD' | 'UNSCHEDULED' | 'UNKNOWN'
 export type SportKind = 'FUTSAL' | 'BASKETBALL' | 'VOLLEYBALL' | 'OTHER'
@@ -78,17 +80,14 @@ export interface GroupData {
 }
 
 export interface IndexGroup extends GroupRef {
-  name: string
-  competition: string
-  category: string
-  sport: string
+  label: string
   newestFetch: number
   lastError: string | null
 }
 
 export interface DataIndex {
   generatedAt: string
-  /** Epoch ms of generatedAt. */
+  /** Epoch ms of the last publish (a run that reached the site). */
   generatedMs: number
   refreshHours: number
   refreshFromHour: number
@@ -100,181 +99,74 @@ export interface CatalogGroup { id: number; name: string; followed: boolean; tea
 export interface CatalogCategory { id: number; name: string; groups: CatalogGroup[] }
 export interface CatalogCompetition { id: number; name: string; categories: CatalogCategory[] }
 export interface CatalogSport { id: number; kind: SportKind; competitions: CatalogCompetition[] }
-export interface Catalog { generatedAt: string; sports: CatalogSport[] }
 
-// --- tolerant readers -------------------------------------------------------------------------
+// --- the index and the catalogue ----------------------------------------------------------------
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v)
 const num = (v: unknown, d = 0): number => (typeof v === 'number' && Number.isFinite(v) ? v : d)
-const numOrNull = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 const str = (v: unknown, d = ''): string => (typeof v === 'string' ? v : d)
-const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v ? v : null)
-const bool = (v: unknown): boolean => v === true
-const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
-
-const STATUSES: Status[] = ['SCHEDULED', 'PLAYED', 'POSTPONED', 'NOT_HELD', 'UNSCHEDULED', 'UNKNOWN']
-const SPORTS: SportKind[] = ['FUTSAL', 'BASKETBALL', 'VOLLEYBALL', 'OTHER']
-
-export function sportKindOf(v: unknown): SportKind {
-  return SPORTS.includes(v as SportKind) ? (v as SportKind) : 'OTHER'
-}
 
 export function sportKindOfId(id: number): SportKind {
   return id === 1 ? 'BASKETBALL' : id === 2 ? 'FUTSAL' : id === 3 ? 'VOLLEYBALL' : 'OTHER'
 }
 
-function team(v: unknown): Team | null {
-  if (!isObj(v) || num(v.id) <= 0) return null
-  return { id: num(v.id), name: str(v.name, `Equipo ${num(v.id)}`), crest: str(v.crest) }
-}
-
-function venue(v: unknown): Venue | null {
-  if (!isObj(v)) return null
-  return {
-    name: str(v.name),
-    address: str(v.address),
-    postcode: str(v.postcode),
-    town: str(v.town),
-    lat: numOrNull(v.lat),
-    lng: numOrNull(v.lng),
-  }
-}
-
-export function parseMatch(v: unknown): Match | null {
-  if (!isObj(v) || num(v.id) <= 0) return null
-  const home = team(v.home)
-  const away = team(v.away)
-  if (!home && !away) return null
-  const hasResult = bool(v.hasResult) && numOrNull(v.homeScore) != null && numOrNull(v.awayScore) != null
-  const winner = v.winner === 'HOME' || v.winner === 'AWAY' || v.winner === 'DRAW' ? v.winner : null
-  return {
-    id: num(v.id),
-    roundId: num(v.roundId),
-    roundNumber: num(v.roundNumber),
-    home,
-    away,
-    start: strOrNull(v.start),
-    timeKnown: bool(v.timeKnown),
-    day: strOrNull(v.day),
-    matchday: strOrNull(v.matchday),
-    status: STATUSES.includes(v.status as Status) ? (v.status as Status) : 'UNKNOWN',
-    statusName: str(v.statusName),
-    hasResult,
-    homeScore: hasResult ? numOrNull(v.homeScore) : null,
-    awayScore: hasResult ? numOrNull(v.awayScore) : null,
-    winner: hasResult ? winner : null,
-    partials: arr(v.partials).filter((p): p is string => typeof p === 'string'),
-    modified: bool(v.modified),
-    modifiedReason: str(v.modifiedReason),
-    duration: str(v.duration),
-    venue: venue(v.venue),
-  }
-}
-
-function standingRow(v: unknown): StandingRow | null {
-  if (!isObj(v)) return null
-  const t = team(v.team)
-  if (!t) return null
-  return {
-    position: num(v.position),
-    team: t,
-    played: num(v.played),
-    won: num(v.won),
-    drawn: num(v.drawn),
-    lost: num(v.lost),
-    scored: num(v.scored),
-    conceded: num(v.conceded),
-    points: num(v.points),
-    form: arr(v.form).filter((f): f is 'W' | 'D' | 'L' => f === 'W' || f === 'D' || f === 'L'),
-  }
-}
-
-function ref(v: unknown): GroupRef | null {
-  if (!isObj(v)) return null
-  const r = { groupId: num(v.groupId), sportId: num(v.sportId), competitionId: num(v.competitionId), categoryId: num(v.categoryId) }
-  return r.groupId > 0 ? r : null
-}
-
-/** Schema 1 and anything later that kept its fields (the pump only adds fields). */
-const knownSchema = (v: Obj) => num(v.v) >= 1
-
-export function parseGroup(v: unknown): GroupData | null {
-  if (!isObj(v) || !knownSchema(v) || !Array.isArray(v.matches)) return null
-  const r = ref(v.ref)
-  if (!r) return null
-  const g = isObj(v.group) ? v.group : {}
-  const st = isObj(v.standings) ? v.standings : {}
-  const rule = isObj(st.rule) ? st.rule : {}
-  return {
-    generatedAt: str(v.generatedAt),
-    ref: r,
-    group: { id: num(g.id, r.groupId), name: str(g.name), competition: str(g.competition), category: str(g.category), sport: str(g.sport) },
-    sport: sportKindOf(v.sport),
-    rounds: arr(v.rounds)
-      .filter(isObj)
-      .filter((x) => num(x.id) > 0)
-      .map((x) => ({ id: num(x.id), number: num(x.number), date: strOrNull(x.date), fetchedAt: num(x.fetchedAt) }))
-      .sort((a, b) => a.number - b.number),
-    currentRoundId: num(v.currentRoundId),
-    newestFetch: num(v.newestFetch),
-    matches: arr(v.matches).map(parseMatch).filter((m): m is Match => m !== null),
-    standings: {
-      rule: { win: num(rule.win, 2), draw: num(rule.draw, 1), loss: num(rule.loss), hasDraws: rule.hasDraws !== false },
-      measured: bool(st.measured),
-      rows: arr(st.rows).map(standingRow).filter((x): x is StandingRow => x !== null),
-    },
-  }
-}
-
+/** `v1/index.json`: schema 1, or any later one that kept its fields (the fetcher only adds fields). */
 export function parseIndex(v: unknown): DataIndex | null {
-  if (!isObj(v) || !knownSchema(v) || !Array.isArray(v.groups)) return null
+  if (!isObj(v) || num(v.v) < 1 || !Array.isArray(v.groups)) return null
   const generatedAt = str(v.generatedAt)
-  const ms = Date.parse(generatedAt)
+  const parsed = Date.parse(generatedAt)
   return {
     generatedAt,
-    generatedMs: Number.isFinite(ms) ? ms : 0,
+    generatedMs: num(v.generatedMs, Number.isFinite(parsed) ? parsed : 0),
     refreshHours: num(v.refreshHours, 3),
     refreshFromHour: num(v.refreshFromHour, 7),
-    refreshToHour: num(v.refreshToHour, 22),
+    refreshToHour: num(v.refreshToHour, 19),
     groups: v.groups.flatMap((g): IndexGroup[] => {
-      const r = ref(g)
-      if (!r || !isObj(g)) return []
+      if (!isObj(g) || num(g.groupId) <= 0) return []
       return [{
-        ...r,
-        name: str(g.name),
-        competition: str(g.competition),
-        category: str(g.category),
-        sport: str(g.sport),
+        groupId: num(g.groupId), sportId: num(g.sportId), competitionId: num(g.competitionId), categoryId: num(g.categoryId),
+        label: str(g.label),
         newestFetch: num(g.newestFetch),
-        lastError: strOrNull(g.lastError),
+        lastError: typeof g.lastError === 'string' && g.lastError ? g.lastError : null,
       }]
     }),
   }
 }
 
-export function parseCatalog(v: unknown): Catalog | null {
-  if (!isObj(v) || !knownSchema(v) || !Array.isArray(v.sports)) return null
-  const named = <T>(x: unknown, f: (o: Obj) => T): T[] => arr(x).filter(isObj).filter((o) => num(o.id) > 0).map(f)
+/**
+ * `v1/catalog/<sportId>.json`: the site's grouped calendar of one round for the whole sport, trimmed
+ * to the teams. Parsed with the core port (groupedRound), teams sorted by name, groups by number.
+ */
+export function buildCatalogSport(v: unknown, sportId: number, followed: Set<number>): CatalogSport | null {
+  if (!isObj(v) || num(v.v) < 1) return null
+  let rounds
+  try {
+    rounds = groupedRoundFrom(v.competitions)
+  } catch {
+    return null
+  }
+  const byName = (a: { name: string }, b: { name: string }) => collator.compare(a.name, b.name)
+  const groupNo = (n: string) => Number(/\d+/.exec(n)?.[0] ?? Number.MAX_SAFE_INTEGER)
   return {
-    generatedAt: str(v.generatedAt),
-    sports: named(v.sports, (s) => ({
-      id: num(s.id),
-      kind: sportKindOf(s.kind),
-      competitions: named(s.competitions, (c) => ({
-        id: num(c.id),
-        name: str(c.name),
-        categories: named(c.categories, (cat) => ({
-          id: num(cat.id),
-          name: str(cat.name),
-          groups: named(cat.groups, (g) => ({
-            id: num(g.id),
-            name: str(g.name),
-            followed: bool(g.followed),
-            teams: arr(g.teams).map(team).filter((t): t is Team => t !== null),
-          })),
-        })),
-      })),
-    })),
+    id: sportId,
+    kind: sportKindOfId(sportId),
+    competitions: rounds.filter((c) => c.competitionId > 0).map((c) => ({
+      id: c.competitionId,
+      name: c.competition,
+      categories: c.categories.filter((k) => k.categoryId > 0).map((k) => ({
+        id: k.categoryId,
+        name: k.name,
+        groups: k.groups.filter((g) => g.groupId > 0).map((g) => {
+          const seen = new Map<number, Team>()
+          for (const m of g.matches) {
+            for (const t of [m.home, m.away]) if (t && !seen.has(t.id)) seen.set(t.id, { id: t.id, name: t.name, crest: t.crestPath })
+          }
+          return { id: g.groupId, name: g.name, followed: followed.has(g.groupId), teams: [...seen.values()].sort(byName) }
+        }).sort((a, b) => groupNo(a.name) - groupNo(b.name) || a.name.localeCompare(b.name)),
+      })).sort(byName),
+    })).sort(byName),
   }
 }
+
+const collator = new Intl.Collator('es-ES', { sensitivity: 'base' })

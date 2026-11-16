@@ -1,9 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { parseCatalog, parseGroup, parseIndex, type Catalog, type DataIndex, type GroupData } from '../lib/data'
+import { buildGroup } from '../core/group'
+import { buildCatalogSport, parseIndex, type CatalogSport, type DataIndex, type GroupData } from '../lib/data'
 import { Format } from '../lib/format'
 import { saveLang, savedLang, type Lang } from '../lib/i18n'
 import { loadKids, saveKids, type Kid } from '../lib/kids'
 import { FetchError, readCached, readFresh } from '../lib/remote'
+import { madridToday } from '../lib/schedule'
 import { readRaw, writeRaw } from '../lib/storage'
 
 // --- settings: language and theme ---------------------------------------------------------------
@@ -114,12 +116,16 @@ interface DataApi {
   refresh: () => Promise<void>
   /** Ask for groups beyond the children's (a group or team screen opened from elsewhere). */
   want: (groupId: number) => void
-  catalog: Catalog | null
-  catalogState: LoadState | 'idle'
-  loadCatalog: () => void
+  /** Per sport id, loaded when a child is being added (one file per sport). */
+  catalog: Record<number, CatalogSport>
+  catalogState: Record<number, LoadState>
+  loadCatalog: (sportId: number) => void
 }
 
 const DataContext = createContext<DataApi | null>(null)
+
+const INDEX = 'v1/index.json'
+const groupPath = (id: number) => `v1/groups/${id}/all.json`
 
 /** Coming back to the app re-checks the data at most this often (it changes every 3 h at most). */
 const RECHECK_MS = 5 * 60_000
@@ -132,8 +138,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [checkedAt, setCheckedAt] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
   const [extra, setExtra] = useState<number[]>([])
-  const [catalog, setCatalog] = useState<Catalog | null>(null)
-  const [catalogState, setCatalogState] = useState<LoadState | 'idle'>('idle')
+  const [catalog, setCatalog] = useState<Record<number, CatalogSport>>({})
+  const [catalogState, setCatalogState] = useState<Record<number, LoadState>>({})
+  const indexRef = useRef<DataIndex | null>(null)
+  indexRef.current = index
   const groupsRef = useRef(groups)
   groupsRef.current = groups
   const running = useRef<Promise<void> | null>(null)
@@ -158,22 +166,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
       lastCheck.current = Date.now()
       try {
         // 1. What was seen last time, at once.
-        const cachedIndex = await readCached('index.json', parseIndex)
+        const cachedIndex = await readCached(INDEX, parseIndex)
         if (cachedIndex) setIndex((cur) => cur ?? cachedIndex)
+        const today = madridToday()
+        const group = (generatedAt: string) => (v: unknown) => buildGroup(v, today, generatedAt)
         for (const id of wantedRef.current) {
           if (groupsRef.current[id]) continue
-          const g = await readCached(`groups/${id}.json`, parseGroup)
+          const g = await readCached(groupPath(id), group(cachedIndex?.generatedAt ?? ''))
           if (g) putGroup(g)
         }
         // 2. The network.
-        const fresh = await readFresh('index.json', parseIndex)
+        const fresh = await readFresh(INDEX, parseIndex)
         setIndex(fresh)
         for (const id of wantedRef.current) {
           const entry = fresh.groups.find((g) => g.groupId === id)
-          if (!entry) continue // not followed by the data job (yet)
+          if (!entry) continue // not followed by the fetcher (yet)
           const held = groupsRef.current[id]
           if (held && held.newestFetch === entry.newestFetch) continue // unchanged since last seen
-          putGroup(await readFresh(`groups/${id}.json`, parseGroup))
+          putGroup(await readFresh(groupPath(id), group(fresh.generatedAt)))
         }
         setCheckedAt(Date.now())
         setState('ok')
@@ -208,20 +218,26 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   }, [load])
 
-  const loadCatalog = useCallback(() => {
-    if (catalogState === 'loading' || catalogState === 'ok') return
-    setCatalogState('loading')
+  const catalogStateRef = useRef(catalogState)
+  catalogStateRef.current = catalogState
+  const loadCatalog = useCallback((sportId: number) => {
+    const st = catalogStateRef.current[sportId]
+    if (st === 'loading' || st === 'ok') return
+    setCatalogState((s) => ({ ...s, [sportId]: 'loading' }))
+    const followed = () => new Set((indexRef.current?.groups ?? []).map((g) => g.groupId))
+    const parse = (v: unknown) => buildCatalogSport(v, sportId, followed())
     void (async () => {
-      const cached = await readCached('catalog.json', parseCatalog)
-      if (cached) setCatalog(cached)
+      const cached = await readCached(`v1/catalog/${sportId}.json`, parse)
+      if (cached) setCatalog((c) => ({ ...c, [sportId]: cached }))
       try {
-        setCatalog(await readFresh('catalog.json', parseCatalog))
-        setCatalogState('ok')
+        const fresh = await readFresh(`v1/catalog/${sportId}.json`, parse)
+        setCatalog((c) => ({ ...c, [sportId]: fresh }))
+        setCatalogState((s) => ({ ...s, [sportId]: 'ok' }))
       } catch (e) {
-        setCatalogState(cached ? 'ok' : e instanceof FetchError && e.offline ? 'offline' : 'error')
+        setCatalogState((s) => ({ ...s, [sportId]: cached ? 'ok' : e instanceof FetchError && e.offline ? 'offline' : 'error' }))
       }
     })()
-  }, [catalogState])
+  }, [])
 
   const api = useMemo<DataApi>(() => ({
     index, groups, state, checkedAt, refreshing,

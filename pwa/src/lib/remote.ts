@@ -80,3 +80,14 @@ export async function readFresh<T>(path: string, parse: (v: unknown) => T | null
 export function __resetRemoteMemory(): void {
   memory.clear()
 }
+
+/**
+ * Data older than this is flagged plainly: the fetcher is a device at someone's home and can be off.
+ * Its runs are 3 h apart in the daytime and 12 h apart overnight (19:07 → 07:07), so 12.5 h only
+ * trips when a run was missed, not every morning before the first one.
+ */
+export const STALE_MS = 12.5 * 3_600_000
+
+export function isStale(generatedMs: number, nowMs: number = Date.now()): boolean {
+  return generatedMs > 0 && nowMs - generatedMs > STALE_MS
+}

@@ -14,15 +14,14 @@ import { FreshnessLine } from './shared'
 /** A group: its calendar round by round, and the computed standings (the app's GroupScreen). */
 export function GroupScreen({ groupId, tab, kidId }: { groupId: number; tab: 'calendar' | 'standings'; kidId?: string }) {
   const fmt = useFmt()
-  const { groups, index, want, state } = useData()
+  const { groups, want, state } = useData()
   const { kids } = useKids()
   useEffect(() => want(groupId), [groupId, want])
   const g = groups[groupId]
   const kid = kids.find((k) => k.id === kidId) ?? kids.find((k) => k.groupId === groupId)
   const accent = kid ? kidColor(kid.color) : null
-  const entry = index?.groups.find((x) => x.groupId === groupId)
-  const title = g?.group.name || entry?.name || kid?.groupName || ''
-  const subtitle = Format.sentence(g?.group.competition || entry?.competition || kid?.competitionName || '')
+  const title = g?.group.name || kid?.groupName || ''
+  const subtitle = Format.sentence(g?.group.competition || kid?.competitionName || '')
 
   const setTab = (t: 'calendar' | 'standings') => navigate({ name: 'group', groupId, tab: t, kidId }, true)
 

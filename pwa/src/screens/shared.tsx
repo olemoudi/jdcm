@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useData, useFmt } from '../hooks/app-state'
 import type { Kid } from '../lib/kids'
-import { REPO_URL } from '../lib/env'
+import { REPO_URL, SITE_URL } from '../lib/env'
+import { isStale } from '../lib/remote'
 import { Format } from '../lib/format'
 import { External, Refresh, Share } from '../components/Icons'
 import { FlatCard, toast } from '../components/ui'
@@ -25,12 +26,14 @@ export function FreshnessLine({ groupId }: { groupId?: number }) {
   const now = useMinuteTick()
   const { index, groups, state, refreshing, refresh } = useData()
   const g = groupId ? groups[groupId] : undefined
-  const at = g?.newestFetch || index?.generatedMs || 0
+  // The last publish: every run that reaches the site publishes, so this is when the data was checked.
+  const at = index?.generatedMs || g?.newestFetch || 0
   const entry = groupId ? index?.groups.find((x) => x.groupId === groupId) : undefined
-  const pace = fmt.t('freshness_pace', index?.refreshHours ?? 3, index?.refreshFromHour ?? 7, index?.refreshToHour ?? 22)
+  const pace = fmt.t('freshness_pace', index?.refreshHours ?? 3, index?.refreshFromHour ?? 7, index?.refreshToHour ?? 19)
+  const stale = isStale(at, now)
   return (
     <div className="px-5 pb-2 pt-1 text-xs text-text-2" data-testid="freshness">
-      <p>
+      <p className={stale ? 'font-bold text-danger' : undefined}>
         {state === 'offline' ? fmt.t('offline_data', fmt.age(at, now)) : fmt.t('freshness', fmt.age(at, now))}
         {' · '}
         <button type="button" onClick={() => void refresh()} disabled={refreshing} className="inline-flex items-center gap-1 text-link disabled:opacity-60">
@@ -71,7 +74,7 @@ export async function shareRequest(text: string, fmt: Format): Promise<void> {
   } catch { /* nothing else to try */ }
 }
 
-/** A child whose group the data job does not follow yet: how to ask for it. */
+/** A child whose group the fetcher does not follow yet: how to ask for it. */
 export function GroupPending({ kid }: { kid: Kid }) {
   const fmt = useFmt()
   const req = groupRequest(kid, fmt)
@@ -98,5 +101,26 @@ export function RequestButtons({ req }: { req: ReturnType<typeof groupRequest> }
         {fmt.t('ask_on_github')} <External size={15} />
       </a>
     </div>
+  )
+}
+
+/**
+ * Said plainly at the top when the data is old (> 12.5 h): the fetcher may be off, and parents must
+ * not take old data for current. Points to the official site.
+ */
+export function StaleBanner() {
+  const fmt = useFmt()
+  const now = useMinuteTick()
+  const { index } = useData()
+  const at = index?.generatedMs ?? 0
+  if (!isStale(at, now)) return null
+  return (
+    <section role="alert" data-testid="stale-banner" className="mx-3 mt-2 rounded-2xl border border-danger/60 bg-danger/10 p-4">
+      <h2 className="text-[15px] font-bold text-danger">{fmt.t('stale_title')}</h2>
+      <p className="mt-1 text-sm">{fmt.t('stale_text', fmt.age(at, now))}</p>
+      <a href={`${SITE_URL}/Calendarios/CalendarioTemporada`} target="_blank" rel="noopener" className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-link">
+        {fmt.t('open_web')} <External size={14} />
+      </a>
+    </section>
   )
 }

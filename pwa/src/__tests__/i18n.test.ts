@@ -18,6 +18,6 @@ describe('i18n', () => {
 
   it('fills placeholders in order', () => {
     expect(translate('es', 'position_points', 3, 6)).toBe('3º · 6 pts')
-    expect(translate('en', 'freshness_pace', 3, 7, 22)).toBe('Refreshed about every 3 h in the daytime (7–22 h).')
+    expect(translate('en', 'freshness_pace', 3, 7, 19)).toBe('Refreshed about every 3 h, from 7 to 19 h.')
   })
 })

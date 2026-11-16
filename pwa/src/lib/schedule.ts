@@ -1,8 +1,9 @@
 import type { GroupData, Match } from './data'
+import { addDays, weekendOf } from '../core/schedule'
 
 /*
  * What a team has coming and what it has done, as a family reads it: a port of :core's
- * schedule/Schedule.kt (the pump already worked out each match's status, result and matchday).
+ * schedule/Schedule.kt, on the view matches (src/core/group.ts worked out status, result and matchday).
  * Dates are "YYYY-MM-DD" strings and times "YYYY-MM-DDTHH:mm" in Madrid wall-clock time, as the
  * site writes them; date arithmetic is done in UTC so the phone's own time zone never matters.
  */
@@ -27,38 +28,14 @@ export function madridToday(ms: number = Date.now()): string {
   return madridNow(ms).slice(0, 10)
 }
 
-const DAY_MS = 86_400_000
+// The weekend arithmetic is core's (one copy: src/core/schedule.ts).
+export { addDays, weekday, weekendOf } from '../core/schedule'
 
-function toUtc(day: string): number {
-  return Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)))
-}
-
-function fromUtc(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10)
-}
-
-export function addDays(day: string, n: number): string {
-  return fromUtc(toUtc(day) + n * DAY_MS)
-}
-
-/** 0 = Sunday … 6 = Saturday. */
-export function weekday(day: string): number {
-  return new Date(toUtc(day)).getUTCDay()
-}
+const toUtc = (day: string) => Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)) - 1, Number(day.slice(8, 10)))
 
 /** Minutes since the epoch of a Madrid wall-clock "YYYY-MM-DDTHH:mm" (comparable, not an instant). */
 function wallMinutes(t: string): number {
   return Math.floor(toUtc(t.slice(0, 10)) / 60_000) + Number(t.slice(11, 13)) * 60 + Number(t.slice(14, 16))
-}
-
-/** The weekend a day belongs to, anchored on its Saturday: Friday-evening games count with it. */
-export function weekendOf(day: string): string {
-  switch (weekday(day)) {
-    case 6: return day
-    case 0: return addDays(day, -1)
-    case 5: return addDays(day, 1)
-    default: return addDays(day, 6 - weekday(day))
-  }
 }
 
 export const isBye = (m: Match) => !m.home || !m.away

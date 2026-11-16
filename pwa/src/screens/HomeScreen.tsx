@@ -13,7 +13,7 @@ import { openDirections, useOpenMatch } from '../components/MatchSheet'
 import { KidPills, MatchdayStrip } from '../components/Strips'
 import { ChevronDown, ChevronUp, EventBusy, SportIcon } from '../components/Icons'
 import { FlatCard, Hairline, PrimaryButton } from '../components/ui'
-import { FreshnessLine, GroupPending } from './shared'
+import { FreshnessLine, GroupPending, StaleBanner } from './shared'
 
 /** Home: the children's matchday, Marca-style (the app's HomeScreen). */
 export function HomeScreen() {
@@ -38,6 +38,7 @@ export function HomeScreen() {
         <h1 className="px-4 pb-1 pt-3 text-[28px] font-bold leading-tight">{fmt.t('tab_matches')}</h1>
       </header>
       <InstallBanner />
+      {kids.length > 0 && <StaleBanner />}
       {kids.length === 0 ? (
         <EmptyState />
       ) : (

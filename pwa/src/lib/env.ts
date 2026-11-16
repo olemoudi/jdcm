@@ -12,9 +12,9 @@ export const APP_VERSION: string = typeof __APP_VERSION__ !== 'undefined' ? __AP
 
 export const BUILT_AT: string = typeof __BUILT_AT__ !== 'undefined' ? __BUILT_AT__ : ''
 
-/** Where the data workflow publishes (the `data` branch, via raw.githubusercontent.com). */
+/** Where the home fetcher publishes (olemoudi/jdcm-data, via raw.githubusercontent.com). */
 export const DATA_URL: string =
-  typeof __DATA_URL__ !== 'undefined' ? __DATA_URL__ : 'https://raw.githubusercontent.com/olemoudi/jdcm/data/'
+  typeof __DATA_URL__ !== 'undefined' ? __DATA_URL__ : 'https://raw.githubusercontent.com/olemoudi/jdcm-data/main/'
 
 export const SITE_URL: string = typeof __SITE_URL__ !== 'undefined' ? __SITE_URL__ : 'https://juegosdeportivos.ecmadrid.org'
 

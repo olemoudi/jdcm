@@ -1,5 +1,5 @@
 // The e2e web server: makensi.es in miniature. /jdcm/ serves the beta build, /jdcm/alpha/ the
-// alpha one (nested, as on the real site), /data/ the data branch, /site/ stands in for the
+// alpha one (nested, as on the real site), /data/ the jdcm-data repo, /site/ stands in for the
 // competition's site (404: crests fall back to initials, and no test ever reaches the real site).
 // POST /__deploy?channel=beta&build=b swaps what a channel serves, like a publish would; build=down
 // makes the channel's host fail (503), to test that the installed shell opens without it.

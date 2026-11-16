@@ -83,7 +83,7 @@ export function SettingsScreen() {
       <Section title={fmt.t('data')}>
         <div className="px-4 py-3 text-sm">
           <p data-testid="data-generated">{fmt.t('data_generated', fmt.age(index?.generatedMs ?? 0, now))}</p>
-          <p className="mt-1 text-text-2">{fmt.t('freshness_pace', index?.refreshHours ?? 3, index?.refreshFromHour ?? 7, index?.refreshToHour ?? 22)}</p>
+          <p className="mt-1 text-text-2">{fmt.t('freshness_pace', index?.refreshHours ?? 3, index?.refreshFromHour ?? 7, index?.refreshToHour ?? 19)}</p>
         </div>
       </Section>
 
