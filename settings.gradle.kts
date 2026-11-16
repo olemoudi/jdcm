@@ -15,4 +15,3 @@ dependencyResolutionManagement {
 rootProject.name = "jdcm"
 include(":app")
 include(":core")
-include(":pump")
