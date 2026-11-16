@@ -1,13 +1,13 @@
 {
-  "versionCode": 5,
-  "versionName": "0.2.2-alpha",
-  "tag": "v0.2.2-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.2-alpha/jdcm.apk",
-  "assetId": 747223958,
-  "size": 4476089,
-  "sha256": "ade16c1401e21c734fbd9ac7e37dd7a74efe95d4cb251fbb88546324227541f9",
+  "versionCode": 7,
+  "versionName": "0.2.3-alpha",
+  "tag": "v0.2.3-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.3-alpha/jdcm.apk",
+  "assetId": 756137704,
+  "size": 4494577,
+  "sha256": "79accc2d51d64ed889021a210ff2406724b2d4131da7bcb8d0b8d5e7f46d127a",
   "notes": {
-    "es": "• En las 4 h antes de cada partido la app mira la web cada ~15 min y avisa al momento si se suspende o cambia de hora.\n• Los partidos no celebrados (lluvia) ya no tienen recordatorio, y si un partido cambia de día se avisa «cambio de fecha».\n• Un partido «disputado con incidencias» sin marcador ya no cuenta como 0-0: sale «Resultado pendiente».",
-    "en": "• In the 4 h before each match the app checks the site every ~15 min and tells you at once if it's called off or moved.\n• Rained-off matches no longer get a reminder, and a match moved to another day is announced as «new date».\n• A match «played with incidents» with no score no longer counts as 0-0: it shows «Result pending»."
+    "es": "• Los partidos aplazados que se juegan semanas después salen en su nuevo fin de semana y se vigilan antes de empezar.\n• Recordatorios más fiables (también con dos partidos el mismo fin de semana), y un doble toque ya no duplica a un hijo.\n• Las instalaciones nuevas siguen siempre el canal beta, y la guía ayuda a que Android no pause la app en verano.",
+    "en": "• Postponed matches replayed weeks later show on their new weekend and get the pre-match checks.\n• More reliable reminders (also with two matches in one weekend), and a double tap no longer adds a child twice.\n• New installs always follow the beta channel, and the guide helps keep Android from pausing the app over the summer."
   }
 }
