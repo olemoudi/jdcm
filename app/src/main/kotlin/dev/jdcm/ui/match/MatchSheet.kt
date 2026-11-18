@@ -132,7 +132,7 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
                 is dev.jdcm.core.weather.MatchWeather.Chance -> InfoRow(
                     Icons.Outlined.Umbrella,
                     stringResource(R.string.detail_weather),
-                    stringResource(R.string.weather_detail, w.rain, dev.jdcm.ui.components.stretchText(w), w.place.ifBlank { m.venue?.town.orEmpty() }, w.play),
+                    stringResource(R.string.weather_detail, w.rain, dev.jdcm.ui.components.stretchText(w), w.place.ifBlank { m.venue?.town.orEmpty() }),
                     dev.jdcm.ui.components.weatherTint(w).takeIf { w.rain >= 30 },
                 )
             }

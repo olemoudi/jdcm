@@ -10,7 +10,8 @@ import java.time.temporal.ChronoUnit
 
 /**
  * What the weather says about a match being played (owner, 2026-11-18): the chance AEMET gives of
- * rain at its hour and its place, read as the chance it goes ahead. Rain-offs are announced at the
+ * rain at its hour and its place — one figure, the chance of rain (the chance it goes ahead is
+ * only its complement, so it is not shown: owner, same day). Rain-offs are announced at the
  * last minute (2026-11-14, a whole matchday), and this is the warning a family can have days before.
  */
 sealed interface MatchWeather {
@@ -19,8 +20,6 @@ sealed interface MatchWeather {
 
     /** [rain]% of rain in AEMET's stretch [fromHour]–[toHour] of the match's day, at [place]. */
     data class Chance(val rain: Int, val fromHour: Int, val toHour: Int, val place: String) : MatchWeather {
-        /** The chance it is played, as far as the rain goes. */
-        val play: Int get() = 100 - rain
         val alerting: Boolean get() = rain > Weather.ALERT_OVER
     }
 }

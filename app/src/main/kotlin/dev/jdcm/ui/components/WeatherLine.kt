@@ -35,7 +35,7 @@ fun weatherTint(w: MatchWeather): Color = when {
     else -> JdcmColors.extra.muted
 }
 
-/** The match card's one line: «Se juega: 15 % · lluvia 85 % de 12 a 24 h», or the roof. */
+/** The match card's one line: «Lluvia 85 % de 12 a 24 h», or the roof. One figure: the chance it goes ahead is just its complement. */
 @Composable
 fun WeatherLine(w: MatchWeather, modifier: Modifier = Modifier) {
     val tint = weatherTint(w)
@@ -44,7 +44,7 @@ fun WeatherLine(w: MatchWeather, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(4.dp))
         val text = when (w) {
             MatchWeather.Covered -> stringResource(R.string.weather_covered)
-            is MatchWeather.Chance -> stringResource(R.string.weather_line, w.play, w.rain, stretchText(w))
+            is MatchWeather.Chance -> stringResource(R.string.weather_line, w.rain, stretchText(w))
         }
         Text(text, style = MaterialTheme.typography.bodySmall, color = tint, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }

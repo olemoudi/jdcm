@@ -88,7 +88,6 @@ class WeatherTest {
         assertEquals(MatchWeather.Chance(0, 6, 12, "Madrid"), Weather.forMatch(m(LocalDateTime.of(2026, 11, 19, 10, 30)), madrid, now))
         val saturday = Weather.forMatch(m(LocalDateTime.of(2026, 11, 21, 16, 0)), madrid, now) as MatchWeather.Chance
         assertEquals(85, saturday.rain)
-        assertEquals(15, saturday.play)
         assertTrue(saturday.alerting)
         assertNull(Weather.forMatch(m(LocalDateTime.of(2026, 11, 22, 10, 0)), madrid, now), "four days ahead: not shown")
         assertNull(Weather.forMatch(m(LocalDateTime.of(2026, 11, 18, 12, 0)), madrid, now), "already started")

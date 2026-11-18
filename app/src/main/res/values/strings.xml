@@ -140,12 +140,12 @@
     <string name="channel_rain_desc" formatted="false">When AEMET gives one of your children\'s matches over 60 % chance of rain</string>
     <string name="notif_rain_title">%1$s\'s match may be rained off</string>
     <string name="notif_rain_text">%1$d %% chance of rain · %2$s · %3$s (AEMET)</string>
-    <string name="weather_line">Goes ahead: %1$d %% · rain %2$d %% %3$s</string>
+    <string name="weather_line">Rain %1$d %% %2$s</string>
     <string name="weather_covered">Covered: played even if it rains</string>
     <string name="weather_stretch">from %1$d to %2$d h</string>
     <string name="weather_whole_day">all day</string>
     <string name="detail_weather">Rain (AEMET)</string>
-    <string name="weather_detail">%1$d %% chance of rain %2$s in %3$s. Chance it goes ahead: %4$d %%.</string>
+    <string name="weather_detail">%1$d %% chance of rain %2$s in %3$s.</string>
     <string name="appearance">Appearance</string>
     <string name="theme_dark">Dark</string>
     <string name="theme_light">Light</string>

@@ -65,7 +65,7 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   chance of rain by 6 h stretches for days 1–2, 12 h for days 3–4, whole day after; no CORS, so not for
   the PWA as is). Municipality from the venue's town (`MadridMunicipalities`, INE 2026, both article
   orders; Madrid's postcodes 28001–28055 as fallback). Shown (card + sheet) only for matches < 4 days
-  ahead, still on: «Se juega: 100 − lluvia %». A venue whose name has a roof word — cubiert*, techad*,
+  ahead, still on: one figure, «Lluvia X %» (the chance it goes ahead is its complement, not shown). A venue whose name has a roof word — cubiert*, techad*,
   techo, pabellón, gimnasio (not «interior»: a patio interior is open) — reads «se juega aunque llueva»
   and needs no forecast. Read only for the children's matches in the window, per municipality ≤ every
   2 h with Home open and ≤ every 6 h in the background, one request a second; background rain checks

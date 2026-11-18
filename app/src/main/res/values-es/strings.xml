@@ -140,12 +140,12 @@
     <string name="channel_rain_desc" formatted="false">Cuando AEMET da más de un 60 % de lluvia para un partido de tus hijos</string>
     <string name="notif_rain_title">Puede suspenderse el partido de %1$s</string>
     <string name="notif_rain_text">%1$d %% de lluvia · %2$s · %3$s (AEMET)</string>
-    <string name="weather_line">Se juega: %1$d %% · lluvia %2$d %% %3$s</string>
+    <string name="weather_line">Lluvia %1$d %% %2$s</string>
     <string name="weather_covered">Cubierto: se juega aunque llueva</string>
     <string name="weather_stretch">de %1$d a %2$d h</string>
     <string name="weather_whole_day">en todo el día</string>
     <string name="detail_weather">Lluvia (AEMET)</string>
-    <string name="weather_detail">%1$d %% de probabilidad de lluvia %2$s en %3$s. Probabilidad de que se juegue: %4$d %%.</string>
+    <string name="weather_detail">%1$d %% de probabilidad de lluvia %2$s en %3$s.</string>
     <string name="appearance">Apariencia</string>
     <string name="theme_dark">Oscuro</string>
     <string name="theme_light">Claro</string>
