@@ -17,6 +17,7 @@ import dev.jdcm.JdcmApp
 import dev.jdcm.core.model.MADRID
 import dev.jdcm.data.SyncMode
 import dev.jdcm.diag.DiagLog
+import dev.jdcm.notify.RainWatch
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 
@@ -40,6 +41,8 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         DiagLog.i(TAG, "run attempt=$runAttemptCount kids=${kids.size}")
         val outcomes = c.repository.syncKids(SyncMode.BACKGROUND, "worker")
         c.settings.lastBackgroundSyncMs = System.currentTimeMillis()
+        // The rain forecast for the children's next matches, and its alerts (RainWatch).
+        runCatching { RainWatch.check(app, "worker") }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
         // The repository re-arms the reminder after any sync that brought data (from here or a screen).
         DiagLog.i(TAG, "end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()
@@ -55,6 +58,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         }
         DiagLog.i(TAG, "pre-match run attempt=$runAttemptCount groups=${groups.map { "#$it" }} late=${(started - app.container.settings.preMatchLastCheckMs) / 1000}s")
         val outcomes = app.container.repository.syncKidGroups(groups, SyncMode.PRE_MATCH, "pre-match")
+        runCatching { RainWatch.check(app, "pre-match") }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
         DiagLog.i(TAG, "pre-match end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()
     }

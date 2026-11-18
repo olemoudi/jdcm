@@ -55,6 +55,20 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   its date *or* any of its matches' own dates (the old round is hot while its replay is near), and
   `Schedule.matchdayOf` lists a match moved > 3 days from its round on its own weekend.
 
+- **Rain forecast** (owner, 2026-11-18; `core/weather/`, `data/WeatherRepo`, `notify/RainWatch`): AEMET's
+  public, keyless municipal XML `https://www.aemet.es/xml/municipios/localidad_<INE>.xml` (ISO-8859-15;
+  chance of rain by 6 h stretches for days 1–2, 12 h for days 3–4, whole day after; no CORS, so not for
+  the PWA as is). Municipality from the venue's town (`MadridMunicipalities`, INE 2026, both article
+  orders; Madrid's postcodes 28001–28055 as fallback). Shown (card + sheet) only for matches < 4 days
+  ahead, still on: «Se juega: 100 − lluvia %». A venue whose name has a roof word — cubiert*, techad*,
+  techo, pabellón, gimnasio (not «interior»: a patio interior is open) — reads «se juega aunque llueva»
+  and needs no forecast. Read only for the children's matches in the window, ≤ every 2 h per
+  municipality, one request a second. **Alerts** (Settings switch, off by default): over 60 %
+  (strictly); on the days before at 20:00 (one inexact alarm, `RainReceiver`), in the last 24 h as soon
+  as a check sees it (worker, pre-match, evening); one per match per 24 h; none 23:00–08:00; every
+  alert sounds (yesterday's card cancelled first) and carries the current %.
+- **Settings is a tab** (0.2.4, beside Explorar): every door to it navigates as the tab, no back arrow.
+
 ## Reliability rules (reviews 2026-11-09 and 2026-11-16)
 
 - `GroupSnapshot.merge` is defensive: the group id is ours; other groups' matches dropped; a round

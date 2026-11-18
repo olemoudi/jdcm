@@ -114,6 +114,12 @@ fun HomeScreen(
     LaunchedEffect(Unit) { c.kids.load() }
     // Loading only: the app's own start (JdcmApp, "shown") refreshes the children's groups.
     LaunchedEffect(kidsOrNull) { kidsOrNull?.forEach { c.repository.load(it.groupId) } }
+    // AEMET's chance of rain for the children's next matches: read in the app's scope (it outlives
+    // the screen), and only what is older than a couple of hours (WeatherRepo).
+    LaunchedEffect(kidsOrNull, snaps) {
+        val watched = dev.jdcm.notify.RainWatch.watched(kidsOrNull.orEmpty(), snaps, java.time.LocalDateTime.now(MADRID))
+        if (watched.isNotEmpty()) c.scope.launch { c.weather.refreshFor(watched.map { it.second }, "home") }
+    }
 
     val kids = kidsOrNull.orEmpty()
     val visible = if (selectedKid == null) kids else kids.filter { it.id == selectedKid }.ifEmpty { kids }
@@ -260,6 +266,10 @@ private fun LazyListScope.kidSection(
             }
             val mine = matches.firstOrNull { it.involves(kid.teamId) }
             val others = matches.filter { it !== mine }
+            val forecasts by dev.jdcm.ui.LocalContainer.current.weather.forecasts.collectAsState()
+            val weather = remember(mine, forecasts) {
+                mine?.let { dev.jdcm.core.weather.Weather.forMatch(it, forecasts, java.time.LocalDateTime.now(MADRID)) }
+            }
             FlatCard(borderColor = if (mine != null && !mine.isBye) accent else null) {
                 if (mine != null) {
                     MatchCard(
@@ -269,6 +279,7 @@ private fun LazyListScope.kidSection(
                         accent = accent,
                         highlightLabel = kid.name,
                         onDirections = actions.directions,
+                        weather = weather,
                     )
                 } else {
                     NoMatchRow(kid, snap, day)

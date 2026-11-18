@@ -56,6 +56,7 @@
 
         <receiver android:name=".notify.ReminderReceiver" android:exported="false" />
         <receiver android:name=".work.PreMatchReceiver" android:exported="false" />
+        <receiver android:name=".notify.RainReceiver" android:exported="false" />
         <receiver android:name=".notify.BootReceiver" android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

@@ -17,6 +17,8 @@ data class SettingsState(
     val reminderHour: Int = 20,
     /** Explorer: also list competitions the site closed. */
     val showClosed: Boolean = false,
+    /** Alert when AEMET gives a child's match over 60 % of rain (off unless asked for: owner, 2026-11-18). */
+    val rainAlerts: Boolean = false,
 )
 
 /** Small, synchronous preferences (SharedPreferences), exposed as one state flow. */
@@ -38,6 +40,7 @@ class Settings(context: Context) {
         notifyReminder = p.getBoolean("notifyReminder", true),
         reminderHour = p.getInt("reminderHour", 20).coerceIn(17, 22),
         showClosed = p.getBoolean("showClosed", false),
+        rainAlerts = p.getBoolean("rainAlerts", false),
     )
 
     fun update(f: (SettingsState) -> SettingsState) {
@@ -49,6 +52,7 @@ class Settings(context: Context) {
             putBoolean("notifyReminder", n.notifyReminder)
             putInt("reminderHour", n.reminderHour)
             putBoolean("showClosed", n.showClosed)
+            putBoolean("rainAlerts", n.rainAlerts)
         }
         mutable.value = n
     }
@@ -92,6 +96,23 @@ class Settings(context: Context) {
     var preMatchAlarmAtMs: Long
         get() = d.getLong("preMatchAlarmAt", 0)
         set(v) = d.edit { putLong("preMatchAlarmAt", v) }
+
+    /**
+     * The last rain alert per match, as "matchId:epochMs": at most one per match in 24 hours
+     * (RainAlertPolicy). Kept short: the newest 40.
+     */
+    var rainAlerted: Map<Int, Long>
+        get() = d.getStringSet("rainAlerted", emptySet()).orEmpty().mapNotNull { e ->
+            val id = e.substringBefore(':').toIntOrNull() ?: return@mapNotNull null
+            val at = e.substringAfter(':').toLongOrNull() ?: return@mapNotNull null
+            id to at
+        }.toMap()
+        set(v) = d.edit { putStringSet("rainAlerted", v.entries.sortedBy { it.value }.takeLast(40).map { "${it.key}:${it.value}" }.toSet()) }
+
+    /** When the evening rain check is set to go off (0 = none), for the diagnostic report. */
+    var rainCheckAtMs: Long
+        get() = d.getLong("rainCheckAt", 0)
+        set(v) = d.edit { putLong("rainCheckAt", v) }
 
     /** Home's install-permission reminder stays hidden until this time ("Más tarde"). */
     var installBannerSnoozedUntil: Long

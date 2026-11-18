@@ -1,5 +1,7 @@
 package dev.jdcm.ui.settings
 
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBar
 import android.content.Intent
 import android.provider.Settings as AndroidSettings
 import androidx.compose.foundation.background
@@ -71,7 +73,6 @@ import dev.jdcm.ui.components.Crest
 import dev.jdcm.ui.components.DoorRow
 import dev.jdcm.ui.components.FlatCard
 import dev.jdcm.ui.components.Hairline
-import dev.jdcm.ui.explore.BackBar
 import dev.jdcm.ui.theme.JdcmColors
 import dev.jdcm.ui.theme.kidColor
 import kotlinx.coroutines.launch
@@ -80,7 +81,6 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsScreen(
     c: AppContainer,
-    onBack: () -> Unit,
     onAddKid: () -> Unit,
     onEditKid: (String) -> Unit,
     onChangelog: () -> Unit,
@@ -104,7 +104,11 @@ fun SettingsScreen(
         Reminders.rearm(ctx)
     }
 
-    Scaffold(topBar = { BackBar(stringResource(R.string.settings), onBack) }, containerColor = MaterialTheme.colorScheme.background) { pad ->
+    // A tab of its own since 0.2.4 (beside Explorar): a title, no way "back" from a tab.
+    Scaffold(
+        topBar = { TopAppBar(title = { Text(stringResource(R.string.settings)) }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)) },
+        containerColor = MaterialTheme.colorScheme.background,
+    ) { pad ->
         LazyColumn(Modifier.fillMaxSize().padding(pad)) {
             item { Title(R.string.kids) }
             item {
@@ -163,6 +167,13 @@ fun SettingsScreen(
                                 FilterChip(selected = s.reminderHour == h, onClick = { changed { it.copy(reminderHour = h) } }, label = { Text("$h:00") })
                             }
                         }
+                    }
+                    Hairline()
+                    SwitchRow(stringResource(R.string.notify_rain), stringResource(R.string.notify_rain_hint), s.rainAlerts) { v ->
+                        changed { it.copy(rainAlerts = v) }
+                        DiagLog.i("UI", "rain alerts ${if (v) "on" else "off"}")
+                        // Switched on: a match in its last 24 hours with rain over 60 % is told now, not at the next run.
+                        if (v) c.scope.launch { dev.jdcm.notify.RainWatch.check(ctx.applicationContext as dev.jdcm.JdcmApp, "switched on") }
                     }
                 }
             }

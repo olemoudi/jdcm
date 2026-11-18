@@ -134,6 +134,18 @@
     <string name="notify_results_hint">Cuando se publica el resultado de su partido</string>
     <string name="notify_reminder">Recordatorio la víspera</string>
     <string name="notify_reminder_hint">A las %1$d:00 del día anterior: hora, rival y campo</string>
+    <string name="notify_rain">Avisar si puede llover en un partido</string>
+    <string name="notify_rain_hint" formatted="false">Si AEMET da más de un 60 % de lluvia a la hora y en el sitio del partido: a las 20 h los días antes y, en las últimas 24 h, en cuanto se vea. Como mucho un aviso al día por partido; nunca de noche ni en campos cubiertos.</string>
+    <string name="channel_rain">Lluvia</string>
+    <string name="channel_rain_desc" formatted="false">Cuando AEMET da más de un 60 % de lluvia para un partido de tus hijos</string>
+    <string name="notif_rain_title">Puede suspenderse el partido de %1$s</string>
+    <string name="notif_rain_text">%1$d %% de lluvia · %2$s · %3$s (AEMET)</string>
+    <string name="weather_line">Se juega: %1$d %% · lluvia %2$d %% %3$s</string>
+    <string name="weather_covered">Cubierto: se juega aunque llueva</string>
+    <string name="weather_stretch">de %1$d a %2$d h</string>
+    <string name="weather_whole_day">en todo el día</string>
+    <string name="detail_weather">Lluvia (AEMET)</string>
+    <string name="weather_detail">%1$d %% de probabilidad de lluvia %2$s en %3$s. Probabilidad de que se juegue: %4$d %%.</string>
     <string name="appearance">Apariencia</string>
     <string name="theme_dark">Oscuro</string>
     <string name="theme_light">Claro</string>

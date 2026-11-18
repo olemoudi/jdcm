@@ -75,6 +75,21 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
     ) + watched.take(6).map { (k, m) ->
         "#${k.id.take(8)} match=#${m.id} group=#${m.groupId} start=${m.start} inWindow=${PreMatchPolicy.inWindow(m, now)}"
     }.ifEmpty { listOf("no match with a time ahead") }
+    // The rain forecast: what was read from AEMET (codes, never places) and what each watched match got.
+    val forecasts = c.weather.forecasts.value
+    val weather = listOf(
+        "rainAlerts=${s.rainAlerts} eveningCheck=${at(c.settings.rainCheckAtMs)} alertedMatches=${c.settings.rainAlerted.size}",
+    ) + forecasts.values.sortedBy { it.code }.map { f ->
+        "aemet ${f.code} read=${at(f.fetchedAtMs)} made=${f.elaborated} stretches=${f.periods.size}"
+    } + dev.jdcm.notify.RainWatch.watched(kids, snaps, now).take(6).map { (k, m) ->
+        val w = dev.jdcm.core.weather.Weather.forMatch(m, forecasts, now)
+        val said = when (w) {
+            null -> "no forecast"
+            dev.jdcm.core.weather.MatchWeather.Covered -> "covered"
+            is dev.jdcm.core.weather.MatchWeather.Chance -> "rain=${w.rain} ${w.fromHour}-${w.toHour}h"
+        }
+        "#${k.id.take(8)} match=#${m.id} start=${m.start} code=${dev.jdcm.core.weather.Weather.municipalityFor(m, now)} $said lastAlert=${at(c.settings.rainAlerted[m.id] ?: 0)}"
+    }
     return listOf(
         settings,
         DiagSection("Kids", kidLines),
@@ -82,5 +97,6 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
         DiagSection("Match states seen", states.ifEmpty { listOf("none") }),
         DiagSection("Reminder", reminder),
         DiagSection("Pre-match checks", preMatch),
+        DiagSection("Weather", weather),
     )
 }

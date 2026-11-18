@@ -68,6 +68,8 @@ fun MatchCard(
     compact: Boolean = false,
     showDate: Boolean = true,
     onDirections: ((Match) -> Unit)? = null,
+    /** AEMET's word on it going ahead (the children's own matches, the next few days). */
+    weather: dev.jdcm.core.weather.MatchWeather? = null,
 ) {
     val ctx = LocalContext.current
     val fmt = remember(ctx) { Format(ctx) }
@@ -114,6 +116,10 @@ fun MatchCard(
                     Spacer(Modifier.width(4.dp))
                     Text(fmt.venueLine(match.venue), style = MaterialTheme.typography.bodySmall, color = extra.muted, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
+            }
+            if (!compact && weather != null) {
+                Spacer(Modifier.height(6.dp))
+                WeatherLine(weather)
             }
         }
         val canGo = onDirections != null && match.venue?.hasPosition == true && !result && match.status != MatchStatus.UNSCHEDULED

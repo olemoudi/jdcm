@@ -1,5 +1,9 @@
 package dev.jdcm.ui.match
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material.icons.outlined.Umbrella
+import androidx.compose.material.icons.outlined.Roofing
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -119,6 +123,19 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
             Hairline()
             InfoRow(Icons.Outlined.Event, stringResource(R.string.detail_when), fmt.whenLine(m))
             InfoRow(Icons.Outlined.Place, stringResource(R.string.detail_where), fmt.venueLine(m.venue))
+            // AEMET's word on it going ahead, for any match whose place has a forecast read.
+            val forecasts by dev.jdcm.ui.LocalContainer.current.weather.forecasts.collectAsState()
+            when (val w = remember(m, forecasts) { dev.jdcm.core.weather.Weather.forMatch(m, forecasts, java.time.LocalDateTime.now(dev.jdcm.core.model.MADRID)) }) {
+                null -> Unit
+                dev.jdcm.core.weather.MatchWeather.Covered ->
+                    InfoRow(Icons.Outlined.Roofing, stringResource(R.string.detail_weather), stringResource(R.string.weather_covered))
+                is dev.jdcm.core.weather.MatchWeather.Chance -> InfoRow(
+                    Icons.Outlined.Umbrella,
+                    stringResource(R.string.detail_weather),
+                    stringResource(R.string.weather_detail, w.rain, dev.jdcm.ui.components.stretchText(w), w.place.ifBlank { m.venue?.town.orEmpty() }, w.play),
+                    dev.jdcm.ui.components.weatherTint(w).takeIf { w.rain >= 30 },
+                )
+            }
             durationMinutes(m)?.let { InfoRow(Icons.Outlined.Timer, stringResource(R.string.detail_duration), "$it min") }
             if (m.modified) {
                 InfoRow(Icons.Outlined.Info, stringResource(R.string.status_modified), m.modifiedReason.ifBlank { stringResource(R.string.modified_explained) }, extra.modified)

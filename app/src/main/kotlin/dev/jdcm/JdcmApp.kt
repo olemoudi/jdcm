@@ -50,6 +50,8 @@ class AppContainer(val app: Application) {
     val groups = GroupCache(app)
     val api = EcmApi(http)
     val notifier = Notifier(app, settings)
+    /** AEMET's chance of rain for the children's matches (WeatherRepo). */
+    val weather = dev.jdcm.data.WeatherRepo(app, http)
     /** Whether this process already counted a showing of the strip legend (once per opening). */
     @Volatile var stripLegendCounted = false
     val repository = Repository(scope, api, groups, kids, onChanges = { notifier.changes(it) }, onFetched = { Reminders.rearm(app) })

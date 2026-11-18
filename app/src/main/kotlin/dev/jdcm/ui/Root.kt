@@ -1,5 +1,7 @@
 package dev.jdcm.ui
 
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.filled.Settings
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -170,9 +172,15 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
             fun go(route: Any) {
                 if (nav.currentBackStackEntry?.lifecycle?.currentState?.isAtLeast(Lifecycle.State.RESUMED) != false) nav.navigate(route)
             }
+            // A tab: one of each, its state kept, Home under it.
+            fun goTab(route: Any) = nav.navigate(route) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
             val entry by nav.currentBackStackEntryAsState()
             val dest = entry?.destination
-            val topLevel = dest == null || dest.hasRoute(HomeRoute::class) || dest.hasRoute(TablesRoute::class) || dest.hasRoute(ExploreRoute::class)
+            val topLevel = dest == null || dest.hasRoute(HomeRoute::class) || dest.hasRoute(TablesRoute::class) || dest.hasRoute(ExploreRoute::class) || dest.hasRoute(SettingsRoute::class)
             Scaffold(
                 bottomBar = {
                     if (topLevel) {
@@ -181,18 +189,14 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                                 Triple(HomeRoute, R.string.tab_matches, Icons.Filled.CalendarMonth to Icons.Outlined.CalendarMonth),
                                 Triple(TablesRoute, R.string.tab_tables, Icons.Filled.FormatListNumbered to Icons.Outlined.FormatListNumbered),
                                 Triple(ExploreRoute, R.string.tab_explore, Icons.Filled.Explore to Icons.Outlined.Explore),
+                                // Settings at the thumb (0.2.4): the header's small icon was easy to miss.
+                                Triple(SettingsRoute, R.string.settings, Icons.Filled.Settings to Icons.Outlined.Settings),
                             )
                             tabs.forEach { (route, label, icons) ->
                                 val selected = dest?.hasRoute(route::class) == true || (dest == null && route == HomeRoute)
                                 NavigationBarItem(
                                     selected = selected,
-                                    onClick = {
-                                        nav.navigate(route) {
-                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
+                                    onClick = { goTab(route) },
                                     icon = { Icon(if (selected) icons.first else icons.second, null) },
                                     label = { Text(stringResource(label)) },
                                     colors = NavigationBarItemDefaults.colors(
@@ -219,7 +223,7 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                     composable<HomeRoute> {
                         HomeScreen(
                             c,
-                            onSettings = { go(SettingsRoute) },
+                            onSettings = { goTab(SettingsRoute) },
                             onAddKid = { go(KidEditorRoute()) },
                             onExplore = { nav.navigate(ExploreRoute) { launchSingleTop = true } },
                             onGroup = { go(it) },
@@ -227,10 +231,10 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                         )
                     }
                     composable<TablesRoute> {
-                        TablesScreen(c, onSettings = { go(SettingsRoute) }, onAddKid = { go(KidEditorRoute()) }, onTeam = { go(it) })
+                        TablesScreen(c, onSettings = { goTab(SettingsRoute) }, onAddKid = { go(KidEditorRoute()) }, onTeam = { go(it) })
                     }
                     composable<ExploreRoute> {
-                        ExploreScreen(onSport = { go(ExploreSportRoute(it)) }, onSettings = { go(SettingsRoute) })
+                        ExploreScreen(onSport = { go(ExploreSportRoute(it)) }, onSettings = { goTab(SettingsRoute) })
                     }
                     composable<ExploreSportRoute> { e ->
                         val r = e.toRoute<ExploreSportRoute>()
@@ -257,7 +261,6 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                     composable<SettingsRoute> {
                         SettingsScreen(
                             c,
-                            onBack = { nav.popBackStack() },
                             onAddKid = { go(KidEditorRoute()) },
                             onEditKid = { go(KidEditorRoute(kidId = it)) },
                             onChangelog = { go(ChangelogRoute) },

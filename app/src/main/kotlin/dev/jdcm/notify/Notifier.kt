@@ -18,6 +18,7 @@ import dev.jdcm.core.model.Match
 import dev.jdcm.core.model.MatchStatus
 import dev.jdcm.core.standings.Outcome
 import dev.jdcm.core.standings.Standings
+import dev.jdcm.core.weather.MatchWeather
 import dev.jdcm.data.Kid
 import dev.jdcm.data.Settings
 import dev.jdcm.diag.DiagLog
@@ -42,6 +43,8 @@ class Notifier(private val context: Context, private val settings: Settings) {
                     .apply { description = context.getString(R.string.channel_results_desc) },
                 NotificationChannel(CH_REMINDERS, context.getString(R.string.channel_reminders), NotificationManager.IMPORTANCE_DEFAULT)
                     .apply { description = context.getString(R.string.channel_reminders_desc) },
+                NotificationChannel(CH_RAIN, context.getString(R.string.channel_rain), NotificationManager.IMPORTANCE_DEFAULT)
+                    .apply { description = context.getString(R.string.channel_rain_desc) },
             ),
         )
     }
@@ -118,6 +121,18 @@ class Notifier(private val context: Context, private val settings: Settings) {
         val time = if (m.timeKnown) fmt.time(m) else context.getString(R.string.time_tbc)
         val text = context.getString(R.string.notif_reminder_text, time, opponent, fmt.venueLine(m.venue))
         post(CH_REMINDERS, notificationId(m.id, 3), context.getString(R.string.notif_reminder_title, kid.name), text, kid, m, "Reminder")
+    }
+
+    /**
+     * "Puede suspenderse por lluvia": AEMET's chance for the match's stretch, as it is now. It
+     * sounds every time it is posted — the policy already holds it to one a day per match — so the
+     * card left from yesterday's is taken down first (an update would be silent: setOnlyAlertOnce).
+     */
+    fun rain(kid: Kid, m: Match, w: MatchWeather.Chance) {
+        val id = notificationId(m.id, 5)
+        runCatching { NotificationManagerCompat.from(context).cancel(id) }
+        val text = context.getString(R.string.notif_rain_text, w.rain, fmt.whenLine(m), w.place.ifBlank { m.venue?.town.orEmpty() })
+        post(CH_RAIN, id, context.getString(R.string.notif_rain_title, kid.name), text, kid, m, "Rain")
     }
 
     private fun describe(kid: Kid, c: MatchChange): Pair<String, String> {
@@ -207,6 +222,7 @@ class Notifier(private val context: Context, private val settings: Settings) {
         const val CH_CHANGES = "changes"
         const val CH_RESULTS = "results"
         const val CH_REMINDERS = "reminders"
+        const val CH_RAIN = "rain"
         const val MAX_PER_KID = 3
 
         /** Kid colours as ARGB, shared with the UI's palette. */

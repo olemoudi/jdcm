@@ -88,6 +88,7 @@ object Reminders {
     suspend fun armBoth(app: JdcmApp) {
         runCatching { arm(app) }.onFailure { DiagLog.e(TAG, "rearm failed", it) }
         runCatching { PreMatch.arm(app) }.onFailure { DiagLog.e("PreMatch", "rearm failed", it) }
+        runCatching { RainWatch.arm(app) }.onFailure { DiagLog.e("Rain", "rearm failed", it) }
     }
 
     /** Not cancelled, not played: a match the child turns up to (a rained-off one gets no reminder). */
