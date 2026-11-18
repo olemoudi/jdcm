@@ -1,13 +1,13 @@
 {
-  "versionCode": 11,
-  "versionName": "0.2.6-alpha",
-  "tag": "v0.2.6-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.6-alpha/jdcm.apk",
-  "assetId": 764079922,
-  "size": 4546505,
-  "sha256": "b0d140c80aa70c415ffd7fa45d492e530e2a279c745ccbcbc5ec82156f23b773",
+  "versionCode": 12,
+  "versionName": "0.2.7-alpha",
+  "tag": "v0.2.7-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.7-alpha/jdcm.apk",
+  "assetId": 764156136,
+  "size": 4546677,
+  "sha256": "354de7044846fd55595f2126a2db0bc920d2f0123c04552bfc94322a466ab97b",
   "notes": {
-    "es": "• La previsión de AEMET muestra una sola cifra, la probabilidad de lluvia: «Lluvia 75 % de 12 a 24 h».",
-    "en": "• AEMET's forecast shows a single figure, the chance of rain: «Rain 75 % from 12 to 24 h»."
+    "es": "• Un partido suspendido por lluvia en domingo ya no se toma por una recuperación.\n• El aviso de lluvia de la víspera ya no se pierde, y el de suspensión suena siempre.\n• Si un niño juega dos partidos el mismo día, Inicio muestra los dos.",
+    "en": "• A match rained off on a Sunday is no longer taken for a replay.\n• The eve's rain alert is no longer lost, and a rain-off notice always sounds.\n• If a child plays twice on the same day, Home shows both matches."
   }
 }
