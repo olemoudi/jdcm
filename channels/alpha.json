@@ -1,13 +1,13 @@
 {
-  "versionCode": 9,
-  "versionName": "0.2.4-alpha",
-  "tag": "v0.2.4-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.4-alpha/jdcm.apk",
-  "assetId": 763865712,
-  "size": 4546269,
-  "sha256": "89f290cfe3edca2e049b9eae154132626628a3e35402698c9258d23d6fd60a30",
+  "versionCode": 10,
+  "versionName": "0.2.5-alpha",
+  "tag": "v0.2.5-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.5-alpha/jdcm.apk",
+  "assetId": 764018390,
+  "size": 4546533,
+  "sha256": "3bf293788b777a26c30c4c15bfd2ce2cb31a5093819e181eaf3c9a9ff04c2b12",
   "notes": {
-    "es": "• Lluvia: en los partidos de los próximos 4 días, la probabilidad de que se juegue según AEMET; en campos cubiertos, «se juega aunque llueva».\n• Aviso opcional (Ajustes): si AEMET da más de un 60 % de lluvia, a las 20 h los días antes o en cuanto se vea en las últimas 24 h.\n• Ajustes tiene ahora su propia pestaña abajo, junto a Explorar.",
-    "en": "• Rain: for matches in the next 4 days, the chance they go ahead per AEMET; covered venues say «played even if it rains».\n• Optional alert (Settings): over 60 % rain per AEMET, at 8 pm on the days before or as soon as it shows in the last 24 h.\n• Settings now has its own tab at the bottom, next to Explore."
+    "es": "• La tira de fechas muestra cada día con partido, sea fin de semana o no: un partido en jueves sale en su jueves.\n• Los partidos suspendidos con fecha nueva salen como «Recuperación», con recordatorio, revisiones previas y previsión de lluvia.\n• El aviso de lluvia de AEMET viene activado; se apaga en Ajustes. Se consulta como mucho cada 6 h en segundo plano.",
+    "en": "• The date strip shows every day with a match, weekend or not: a Thursday match shows on its Thursday.\n• Rained-off matches given a new date show as «Replay», with the reminder, pre-match checks and rain forecast.\n• AEMET's rain alert is now on by default; switch it off in Settings. In the background it checks at most every 6 h."
   }
 }
