@@ -1,13 +1,13 @@
 {
-  "versionCode": 10,
-  "versionName": "0.2.5-alpha",
-  "tag": "v0.2.5-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.5-alpha/jdcm.apk",
-  "assetId": 764018390,
-  "size": 4546533,
-  "sha256": "3bf293788b777a26c30c4c15bfd2ce2cb31a5093819e181eaf3c9a9ff04c2b12",
+  "versionCode": 11,
+  "versionName": "0.2.6-alpha",
+  "tag": "v0.2.6-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.6-alpha/jdcm.apk",
+  "assetId": 764079922,
+  "size": 4546505,
+  "sha256": "b0d140c80aa70c415ffd7fa45d492e530e2a279c745ccbcbc5ec82156f23b773",
   "notes": {
-    "es": "• La tira de fechas muestra cada día con partido, sea fin de semana o no: un partido en jueves sale en su jueves.\n• Los partidos suspendidos con fecha nueva salen como «Recuperación», con recordatorio, revisiones previas y previsión de lluvia.\n• El aviso de lluvia de AEMET viene activado; se apaga en Ajustes. Se consulta como mucho cada 6 h en segundo plano.",
-    "en": "• The date strip shows every day with a match, weekend or not: a Thursday match shows on its Thursday.\n• Rained-off matches given a new date show as «Replay», with the reminder, pre-match checks and rain forecast.\n• AEMET's rain alert is now on by default; switch it off in Settings. In the background it checks at most every 6 h."
+    "es": "• La previsión de AEMET muestra una sola cifra, la probabilidad de lluvia: «Lluvia 75 % de 12 a 24 h».",
+    "en": "• AEMET's forecast shows a single figure, the chance of rain: «Rain 75 % from 12 to 24 h»."
   }
 }
