@@ -111,6 +111,7 @@ data class GroupSnapshot(
             .map { it.copy(roundId = round.id, roundNumber = round.number, groupId = group.id) }
             .distinctBy { it.id }
             .map { m -> fillGaps(m, heldById[m.id]) }
+            .map { m -> notHeldDay(m, heldById[m.id]) }
             .map { m -> unbelievedResult(m, today) }
         val ids = fresh.map { it.id }.toSet()
         val kept = matches.filter { it.roundId != round.id && it.id !in ids }
@@ -119,6 +120,18 @@ data class GroupSnapshot(
             matches = (kept + fresh).sortedWith(MatchOrder),
             roundFetchedAt = roundFetchedAt + (round.id to nowMs),
         )
+    }
+
+    /**
+     * The day a match was on when it went «No Celebrado», carried from one answer to the next, so
+     * a later date can be told for a replay ([Match.isReplay]). Seen going off now: the day it held.
+     */
+    private fun notHeldDay(m: Match, held: Match?): Match {
+        if (held == null) return m
+        val carried = m.notHeldOn ?: held.notHeldOn
+        val wentOff = m.status == MatchStatus.NOT_HELD && held.status != MatchStatus.NOT_HELD
+        val day = if (wentOff) held.day ?: carried else carried
+        return if (day == m.notHeldOn) m else m.copy(notHeldOn = day)
     }
 
     /**

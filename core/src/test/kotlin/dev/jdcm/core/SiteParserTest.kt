@@ -71,6 +71,10 @@ class SiteParserTest {
         assertEquals(306, grouped.single().categories.single().categoryId)
         assertEquals(8, groups.size)
         assertTrue(groups.all { g -> g.matches.isNotEmpty() })
+        // No round date is sent; the day most of its matches are on stands in (a replay is told by it).
+        val days = groups.flatMap { it.matches }.mapNotNull { it.start?.toLocalDate() }
+        val common = days.groupingBy { it }.eachCount().maxByOrNull { it.value }!!.key
+        assertTrue(groups.flatMap { it.matches }.all { it.roundDate == common })
     }
 
     @Test

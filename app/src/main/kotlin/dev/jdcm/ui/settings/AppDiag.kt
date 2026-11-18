@@ -60,7 +60,7 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
     }.ifEmpty { listOf("none cached") } + "cache on disk ${c.groups.sizeBytes() / 1024} KB in ${c.groups.ids().size} groups"
 
     val states = snaps.values.flatMap { it.matches }
-        .groupingBy { "${it.statusId}:${it.statusName}:closed=${it.closed}:winner=${it.winnerId != 0}:score=${it.scoreKnown}:result=${it.hasResult}" }.eachCount()
+        .groupingBy { "${it.statusId}:${it.statusName}:closed=${it.closed}:winner=${it.winnerId != 0}:score=${it.scoreKnown}:result=${it.hasResult}:replay=${it.isReplay}" }.eachCount()
         .entries.sortedByDescending { it.value }.map { "${it.key} ×${it.value}" }
 
     val due = Reminders.nextDue(kids, snaps, s.reminderHour, now, c.settings.remindedMatchIds)

@@ -263,32 +263,40 @@ private fun LazyListScope.kidSection(
                 return@Column
             }
             // The child's match on that date (or their rest), and the rest of its round, whatever days those are on.
-            val mine = remember(snap, day) { snap.teamMatches(kid.teamId).filter { it.day == day }.sortedWith(MatchOrder).firstOrNull() }
+            val ofDay = remember(snap, day) { snap.teamMatches(kid.teamId).filter { it.day == day }.sortedWith(MatchOrder) }
+            // Every match the child plays that date, a rest only when nothing else (review 2026-11-18:
+            // a replay can land on the same date as another match, and the second one vanished).
+            val mineAll = remember(ofDay) { ofDay.filter { !it.isBye }.ifEmpty { ofDay.take(1) } }
+            val mine = mineAll.firstOrNull()
             val others = remember(snap, mine) {
-                mine?.let { m -> snap.matches.filter { it.roundId == m.roundId && it.id != m.id }.sortedWith(MatchOrder) }.orEmpty()
+                mine?.let { m -> snap.matches.filter { it.roundId == m.roundId && mineAll.none { x -> x.id == it.id } }.sortedWith(MatchOrder) }.orEmpty()
             }
             val forecasts by dev.jdcm.ui.LocalContainer.current.weather.forecasts.collectAsState()
-            val weather = remember(mine, forecasts) {
-                mine?.let { dev.jdcm.core.weather.Weather.forMatch(it, forecasts, java.time.LocalDateTime.now(MADRID)) }
+            val weather = remember(mineAll, forecasts) {
+                val now = java.time.LocalDateTime.now(MADRID)
+                mineAll.associate { it.id to dev.jdcm.core.weather.Weather.forMatch(it, forecasts, now) }
             }
             FlatCard(borderColor = if (mine != null && !mine.isBye) accent else null) {
                 if (mine != null) {
-                    MatchCard(
-                        mine,
-                        onClick = { actions.openMatch(MatchArgs(mine, ref, kid.teamId, accent, kid.name)) },
-                        highlightTeamId = kid.teamId,
-                        accent = accent,
-                        highlightLabel = kid.name,
-                        onDirections = actions.directions,
-                        weather = weather,
-                    )
+                    mineAll.forEachIndexed { i, m ->
+                        if (i > 0) Hairline()
+                        MatchCard(
+                            m,
+                            onClick = { actions.openMatch(MatchArgs(m, ref, kid.teamId, accent, kid.name)) },
+                            highlightTeamId = kid.teamId,
+                            accent = accent,
+                            highlightLabel = kid.name,
+                            onDirections = actions.directions,
+                            weather = weather[m.id],
+                        )
+                    }
                 } else {
                     NoMatchRow(kid, snap, day)
                 }
             }
             // The latest result stays in sight while the matchday on screen is still to be played.
             val last = remember(snap) { Schedule.last(snap, kid.teamId) }
-            if (last != null && (mine == null || !mine.hasResult) && last.id != mine?.id) {
+            if (last != null && (mine == null || !mine.hasResult) && mineAll.none { it.id == last.id }) {
                 LastResultRow(kid, last) { actions.openMatch(MatchArgs(last, ref, kid.teamId, accent, kid.name)) }
             }
             if (others.isNotEmpty()) {

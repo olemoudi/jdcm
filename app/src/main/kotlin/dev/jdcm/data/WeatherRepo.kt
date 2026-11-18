@@ -14,8 +14,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.builtins.ListSerializer
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -33,7 +33,16 @@ import java.time.LocalDateTime
  * time, a second apart, with the app's honest User-Agent; the forecasts are kept on disk so Home
  * shows the last one read when it opens offline.
  */
-class WeatherRepo(context: android.content.Context, private val http: OkHttpClient) {
+class WeatherRepo(context: android.content.Context, shared: OkHttpClient) {
+    /** A forecast is a nicety: nobody waits a minute for it, and the 20:00 broadcast can't (review 2026-11-18). */
+    private val http: OkHttpClient = shared.newBuilder()
+        .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
+        .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
+
+    /** When a municipality last failed: not asked again for [RETRY_AFTER_FAILURE_MS] (in memory, under [gate]). */
+    private val failedAt = HashMap<String, Long>()
     private val file = JsonFile(File(context.filesDir, "forecasts.json"), ListSerializer(RainForecast.serializer()))
     private val mutable = MutableStateFlow<Map<String, RainForecast>>(emptyMap())
     val forecasts: StateFlow<Map<String, RainForecast>> = mutable.asStateFlow()
@@ -52,33 +61,60 @@ class WeatherRepo(context: android.content.Context, private val http: OkHttpClie
      * failures (a forecast is a nicety): the last one read stays, and the next call tries again.
      * Returns how many were read.
      */
-    suspend fun refreshFor(matches: Collection<Match>, reason: String, maxAgeMs: Long = Weather.MAX_AGE_MS): Int = gate.withLock {
+    suspend fun refreshFor(
+        matches: Collection<Match>,
+        reason: String,
+        maxAgeMs: Long = Weather.MAX_AGE_MS,
+        deadlineMs: Long = Long.MAX_VALUE,
+    ): Int {
+        withTimeoutOrNull(GATE_WAIT_MS) { gate.lock() } ?: run {
+            DiagLog.i(TAG, "forecasts reason=$reason: another read is running, skipped")
+            return 0
+        }
+        try {
+            return refreshLocked(matches, reason, maxAgeMs, deadlineMs)
+        } finally {
+            gate.unlock()
+        }
+    }
+
+    private suspend fun refreshLocked(matches: Collection<Match>, reason: String, maxAgeMs: Long, deadlineMs: Long): Int {
         load()
         val now = LocalDateTime.now(MADRID)
         val nowMs = System.currentTimeMillis()
         val codes = matches.mapNotNull { Weather.municipalityFor(it, now) }.toSet()
-        val due = codes.filter { code -> mutable.value[code]?.let { nowMs - it.fetchedAtMs !in 0 until maxAgeMs } ?: true }
-        if (due.isEmpty()) return@withLock 0
+        val stale = codes.filter { code -> mutable.value[code]?.let { nowMs - it.fetchedAtMs !in 0 until maxAgeMs } ?: true }
+        // A municipality that just failed (404, a broken answer) is not asked on every Home update.
+        val due = stale.filter { code -> failedAt[code]?.let { nowMs - it !in 0 until RETRY_AFTER_FAILURE_MS } ?: true }
+        if (due.size < stale.size) DiagLog.i(TAG, "forecasts reason=$reason: ${stale - due.toSet()} failed lately, not asked")
+        if (due.isEmpty()) return 0
         var read = 0
         for ((i, code) in due.withIndex()) {
             if (i > 0) delay(GAP_MS)
+            if (System.currentTimeMillis() > deadlineMs) {
+                DiagLog.w(TAG, "forecasts reason=$reason: out of time, ${due.size - i} not read")
+                break
+            }
             try {
                 val forecast = fetch(code, System.currentTimeMillis())
                 if (forecast == null) {
+                    failedAt[code] = System.currentTimeMillis()
                     DiagLog.w(TAG, "aemet $code: no forecast in the answer")
                     continue
                 }
+                failedAt.remove(code)
                 mutable.update { it + (code to forecast) }
                 read++
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                DiagLog.w(TAG, "aemet $code failed: ${e.javaClass.simpleName}")
+                failedAt[code] = System.currentTimeMillis()
+                DiagLog.w(TAG, "aemet $code failed", e)
             }
         }
-        runCatching { file.write(mutable.value.values.toList()) }.onFailure { DiagLog.w(TAG, "forecasts not saved", it) }
+        if (read > 0) runCatching { file.write(mutable.value.values.toList()) }.onFailure { DiagLog.w(TAG, "forecasts not saved", it) }
         DiagLog.i(TAG, "forecasts reason=$reason asked=${due.size} read=$read codes=$due")
-        read
+        return read
     }
 
     private suspend fun fetch(code: String, nowMs: Long): RainForecast? = withContext(Dispatchers.IO) {
@@ -96,6 +132,8 @@ class WeatherRepo(context: android.content.Context, private val http: OkHttpClie
     companion object {
         private const val TAG = "Weather"
         private const val GAP_MS = 1_000L
+        private const val GATE_WAIT_MS = 15_000L
+        private const val RETRY_AFTER_FAILURE_MS = 30 * 60_000L
         private const val MAX_BYTES = 512L * 1024
     }
 }

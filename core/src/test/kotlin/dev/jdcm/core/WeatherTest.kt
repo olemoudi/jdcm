@@ -19,13 +19,18 @@ import java.time.LocalDateTime
 
 /** The rain forecast for a match (0.2.4): AEMET's keyless XML, the roof, the window, the alerts. */
 class WeatherTest {
+    private companion object {
+        /** When the fixture was read: 14:00 on the day AEMET made it. */
+        val READ_AT_MS: Long = java.time.ZonedDateTime.of(2026, 11, 18, 14, 0, 0, 0, dev.jdcm.core.model.MADRID).toInstant().toEpochMilli()
+    }
+
     private val a = team(1, "A")
     private val b = team(2, "B")
 
     /** Real: Madrid as AEMET published it on 2026-11-18 13:23 (ISO-8859-15). */
     private val madrid: RainForecast by lazy {
         val bytes = requireNotNull(javaClass.getResource("/fixtures/aemet_28079.xml")).readBytes()
-        requireNotNull(AemetParser.parse(String(bytes, charset("ISO-8859-15")), "28079", fetchedAtMs = 1))
+        requireNotNull(AemetParser.parse(String(bytes, charset("ISO-8859-15")), "28079", fetchedAtMs = READ_AT_MS))
     }
 
     @Test
@@ -98,6 +103,10 @@ class WeatherTest {
             "a roof needs no forecast",
         )
         assertNull(Weather.forMatch(m(LocalDateTime.of(2026, 11, 21, 16, 0)), null, now), "no forecast read yet")
+        assertNull(
+            Weather.forMatch(m(LocalDateTime.of(2026, 11, 21, 16, 0)), madrid, LocalDateTime.of(2026, 11, 19, 2, 30)),
+            "read over 12 h ago (AEMET silent since): not shown, not alerted on",
+        )
         assertEquals("28079", Weather.municipalityFor(m(LocalDateTime.of(2026, 11, 21, 16, 0)), now))
     }
 
@@ -114,8 +123,27 @@ class WeatherTest {
         assertFalse(due(LocalDateTime.of(2026, 11, 21, 7, 30)), "not in the night, even on the day")
         assertTrue(due(LocalDateTime.of(2026, 11, 21, 8, 0)), "the morning of the match")
         assertFalse(due(LocalDateTime.of(2026, 11, 21, 11, 0)), "once it has started, nothing")
+        assertTrue(
+            due(LocalDateTime.of(2026, 11, 20, 20, 0), last = LocalDateTime.of(2026, 11, 19, 20, 40)),
+            "one a day: yesterday's evening alert, late by the alarm's drift, does not swallow tonight's",
+        )
         assertEquals(LocalDateTime.of(2026, 11, 19, 20, 0), RainAlertPolicy.nextEvening(LocalDateTime.of(2026, 11, 19, 19, 59)))
         assertEquals(LocalDateTime.of(2026, 11, 20, 20, 0), RainAlertPolicy.nextEvening(LocalDateTime.of(2026, 11, 19, 20, 0)))
+    }
+
+    @Test
+    fun `an untimed match is taken to start in the morning, for the last-24-hours rule`() {
+        val untimed = match(1, a, b, start = LocalDateTime.of(2026, 11, 21, 0, 0)).copy(timeKnown = false)
+        val start = Weather.alertStart(untimed)!!
+        assertEquals(LocalDateTime.of(2026, 11, 21, 9, 0), start)
+        assertTrue(RainAlertPolicy.due(75, start, LocalDateTime.of(2026, 11, 21, 8, 15), null), "on its own morning")
+        assertFalse(RainAlertPolicy.due(75, start, LocalDateTime.of(2026, 11, 20, 8, 15), null), "not yet in its last 24 h: the evening")
+    }
+
+    @Test
+    fun `a capital postcode wins over a guess from the start of a name`() {
+        assertEquals("28079", MadridMunicipalities.codeFor("Moraleja", "28050"))
+        assertEquals("28127", MadridMunicipalities.codeFor("Las Rozas", "28231"))
     }
 
     @Test

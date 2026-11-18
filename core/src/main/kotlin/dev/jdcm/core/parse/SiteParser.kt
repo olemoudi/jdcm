@@ -84,8 +84,24 @@ object SiteParser {
         )
     }
 
-    /** `/Calendarios/ObtenerCalendarioAgrupado`: every group of a category (or sport) for one round number. */
+    /**
+     * `/Calendarios/ObtenerCalendarioAgrupado`: every group of a category (or sport) for one round number.
+     * It sends no round date (`FechaJornada`), which a replay is told by ([Match.isReplay]): the
+     * day most of the answer's matches are on stands in for it (review 2026-11-18).
+     */
     fun groupedRound(body: String): List<GroupedRound> {
+        val parsed = groupedRoundAsSent(body)
+        val roundDay = parsed.flatMap { it.categories }.flatMap { it.groups }.flatMap { it.matches }
+            .mapNotNull { it.start?.toLocalDate() }.groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+            ?: return parsed
+        return parsed.map { r ->
+            r.copy(categories = r.categories.map { cat ->
+                cat.copy(groups = cat.groups.map { g -> g.copy(matches = g.matches.map { m -> if (m.roundDate == null) m.copy(roundDate = roundDay) else m }) })
+            })
+        }
+    }
+
+    private fun groupedRoundAsSent(body: String): List<GroupedRound> {
         val root = unwrap(body) as? JsonArray ?: throw UnexpectedResponse("grouped calendar is not an array")
         return root.map { it.obj() ?: JsonObject(emptyMap()) }.map { c ->
             GroupedRound(

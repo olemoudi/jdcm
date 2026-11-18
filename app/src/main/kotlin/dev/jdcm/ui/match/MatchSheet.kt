@@ -96,7 +96,7 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
                     }
                     fmt.statusLabel(m)?.takeIf { !m.hasResult }?.let {
                         Spacer(Modifier.height(4.dp))
-                        Text(it.uppercase(), style = MaterialTheme.typography.labelLarge, color = extra.danger, fontWeight = FontWeight.Bold)
+                        Text(it.uppercase(), style = MaterialTheme.typography.labelLarge, color = if (it == stringResource(R.string.status_replay)) extra.modified else extra.danger, fontWeight = FontWeight.Bold)
                     }
                 }
                 BigTeam(m.away, m, args.highlightTeamId, Modifier.weight(1f)) { t -> args.ref?.let { onTeam(it, t.id) } }

@@ -215,4 +215,33 @@ class MergeAndPolicyTest {
         val plain = snapshot(listOf(match(1, a, b, round = 1)), listOf(r1)).copy(roundFetchedAt = stamp)
         assertFalse(RefreshPolicy.isDue(plain, r1, now, nowMs, 15 * RefreshPolicy.MINUTE), "a round 4 weeks old is a far one")
     }
+
+    @Test
+    fun `a sunday match rained off on its sunday is called off, not a replay`() {
+        // The round is dated on its Saturday; the match is on the Sunday (as fixture #8979).
+        val sunday = match(1, a, b, start = LocalDateTime.of(2026, 11, 15, 10, 0), status = "No Celebrado/Incompleto", statusId = 6)
+            .copy(roundDate = java.time.LocalDate.of(2026, 11, 14))
+        assertFalse(sunday.isReplay)
+        assertTrue(sunday.isCancelled)
+        // Given a day after the round's weekend, first seen like that: a replay.
+        assertTrue(sunday.copy(start = LocalDateTime.of(2026, 12, 10, 18, 30)).isReplay)
+    }
+
+    @Test
+    fun `the day a match went off is remembered, and only a later day makes it a replay`() {
+        // Moved by request to a Wednesday, then rained off on that Wednesday: called off.
+        val wednesday = LocalDateTime.of(2026, 11, 18, 18, 0)
+        val held = snapshot(listOf(match(1, a, b, start = wednesday, round = 1), match(2, c, d, round = 1)), listOf(r1, r2))
+            .let { s -> s.copy(matches = s.matches.map { if (it.id == 1) it.copy(roundDate = SAT_14) else it }) }
+        val off = held.merge(page(r1, match(1, a, b, start = wednesday, round = 1, status = "No Celebrado/Incompleto", statusId = 6).copy(roundDate = SAT_14), match(2, c, d, round = 1)), sunday, false).snapshot
+        val m = off.matches.single { it.id == 1 }
+        assertEquals(java.time.LocalDate.of(2026, 11, 18), m.notHeldOn, "the day it was on when it went off")
+        assertFalse(m.isReplay, "rained off on its own (moved) day")
+        // Then the site gives it a new date, still «No Celebrado»: now it is the replay.
+        val replayed = off.merge(page(r1, match(1, a, b, start = LocalDateTime.of(2026, 12, 10, 18, 30), round = 1, status = "No Celebrado/Incompleto", statusId = 6).copy(roundDate = SAT_14), match(2, c, d, round = 1)), sunday, false).snapshot
+        val r = replayed.matches.single { it.id == 1 }
+        assertEquals(java.time.LocalDate.of(2026, 11, 18), r.notHeldOn, "carried from one answer to the next")
+        assertTrue(r.isReplay)
+        assertFalse(r.isCancelled)
+    }
 }

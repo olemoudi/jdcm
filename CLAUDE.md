@@ -54,8 +54,12 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
 - **Replays**: a rescheduled match keeps its round, so `RefreshPolicy.distanceDays` measures a round by
   its date *or* any of its matches' own dates (the old round is hot while its replay is near). The site
   leaves a rained-off match «No Celebrado» (state 6) when it gives it a new date (seen 2026-11-18:
-  14 Nov → Thu 10 Dec): `Match.isReplay` (state 6, no result, own date after its round's) is *on* —
-  not `isCancelled` — shown «Recuperación», with reminder, pre-match checks and forecast.
+  14 Nov → Thu 10 Dec): `Match.isReplay` is *on* — not `isCancelled` — shown «Recuperación» while
+  ahead, with reminder, pre-match checks and forecast. Replay = state 6, no result, and a date after
+  the day it was on when the app saw it go off (`notHeldOn`, kept by `merge`), or — first seen
+  already off — after its round's *weekend* (rounds are dated on the Saturday: a Sunday rained off on
+  its Sunday is off, review 2026-11-18). The grouped calendar sends no round date: the answer's most
+  common match day stands in. Home shows every match a child plays on a date.
 - **Home's strip is every date a child plays on** (owner, 2026-11-18), weekend or not
   (`Schedule.matchDates`; a rest on its round's day); a date shows the child's match that day and the
   rest of its round. Opens on today's or the next date (`focusDate`).
@@ -71,9 +75,14 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   2 h with Home open and ≤ every 6 h in the background, one request a second; background rain checks
   (worker, pre-match) run at most every 6 h (owner, 2026-11-18), the 20:00 one always. **Alerts**
   (Settings switch, **on by default** — opt-out, owner 2026-11-18): over 60 %
-  (strictly); on the days before at 20:00 (one inexact alarm, `RainReceiver`), in the last 24 h as soon
-  as a check sees it (worker, pre-match, evening); one per match per 24 h; none 23:00–08:00; every
-  alert sounds (yesterday's card cancelled first) and carries the current %.
+  (strictly); on the days before at 20:00 (one alarm, `RainReceiver`; exact below Android 12, where
+  an inexact one can drift hours), in the last 24 h as soon as a check sees it (worker, pre-match,
+  evening; an untimed match counts from 09:00); one per match a day (`SILENCE` = 20 h, so the evening
+  alarm's drift can't swallow the next evening's); none 23:00–08:00; every alert sounds (yesterday's
+  card cancelled first, its own id kind 6) and carries the current %. A forecast read > 12 h ago is
+  neither shown nor alerted on. One check at a time (`RainWatch` mutex); the receiver stops starting
+  reads after 30 s and AEMET calls end at 10 s (broadcast budget); a municipality that failed is not
+  asked for 30 min. No evening alarm with Android's notifications off.
 - **Settings is a tab** (0.2.4, beside Explorar): every door to it navigates as the tab, no back arrow.
 
 ## Reliability rules (reviews 2026-11-09 and 2026-11-16)
@@ -93,7 +102,7 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   (app scope), never in their own scope. The team search writes groups under the group's lock.
 - Notifications: ≤ 3 per child per sync (else one summary), `setOnlyAlertOnce`, ids per kind; changes
   only against data < 3 days old (a group cached long ago by the explorer has old results, not news).
-- Eve reminder: each child's first match that is on, not started, not reminded and whose eve is not
+- Eve reminder (one alarm; exact below Android 12): each child's first match that is on, not started, not reminded and whose eve is not
   long gone (`Reminders.candidates`); the alarm posts only what is due (`dueNow`). Boot re-arm holds
   `goAsync`. Known: siblings in the same match get one notification (ids per match).
 - `KidStore`: read-modify-write under a mutex, disk before memory, write not cancellable, a failed

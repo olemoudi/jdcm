@@ -1,5 +1,6 @@
 package dev.jdcm.core.weather
 
+import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.Match
 import dev.jdcm.core.model.MatchStatus
 import dev.jdcm.core.model.Venue
@@ -36,6 +37,15 @@ object Weather {
 
     /** In the background, forecasts are read — and rain checks run — at most this often (owner, 2026-11-18). */
     const val BACKGROUND_MAX_AGE_MS = 6 * 60 * 60_000L
+
+    /**
+     * A forecast older than this is neither shown nor alerted on (review 2026-11-18): if AEMET has
+     * not answered for half a day, a figure from days ago would go out as "the current %".
+     */
+    const val STALE_MS = 12 * 60 * 60_000L
+
+    /** The hour an untimed match is taken to start at, for the alerts' last-24-hours rule. */
+    const val UNTIMED_HOUR = 9
 
     /**
      * Whether a venue is under a roof. The site writes it after the last dash of the name —
@@ -84,9 +94,18 @@ object Weather {
         if (!inWindow(m, now) || m.venue == null) return null
         if (isCovered(m.venue)) return MatchWeather.Covered
         val day = dayOf(m) ?: return null
-        val p = periodFor(forecast ?: return null, day, if (m.timeKnown) m.start?.hour else null) ?: return null
+        if (forecast == null || !isFresh(forecast, now)) return null
+        val p = periodFor(forecast, day, if (m.timeKnown) m.start?.hour else null) ?: return null
         return MatchWeather.Chance(p.probability, p.fromHour, p.toHour, forecast.place)
     }
+
+    /** Read less than [STALE_MS] ago (a clock set back counts as fresh: it was read). */
+    fun isFresh(forecast: RainForecast, now: LocalDateTime): Boolean =
+        now.atZone(MADRID).toInstant().toEpochMilli() - forecast.fetchedAtMs < STALE_MS
+
+    /** When the alerts take a match to start: its hour, or [UNTIMED_HOUR] of its day when it has none. */
+    fun alertStart(m: Match): LocalDateTime? =
+        m.start?.takeIf { m.timeKnown } ?: dayOf(m)?.atTime(UNTIMED_HOUR, 0)
 
     /** The same, looking the match's municipality up in [forecasts] (keyed by INE code). */
     fun forMatch(m: Match, forecasts: Map<String, RainForecast>, now: LocalDateTime): MatchWeather? =
@@ -105,22 +124,26 @@ object Weather {
 
 /**
  * When a rain alert may sound (owner, 2026-11-18): a chance over [Weather.ALERT_OVER]; on the days
- * before, at 20:00; in the last 24 hours, as soon as it is seen; never more than one per match in 24
- * hours. And never in the night (23:00–08:00): a "may be rained off" is not worth waking anybody
- * for, and the morning comes before any match does.
+ * before, at 20:00; in the last 24 hours, as soon as it is seen; at most one per match a day. And
+ * never in the night (23:00–08:00): a "may be rained off" is not worth waking anybody for, and the
+ * morning comes before any match does.
+ *
+ * "A day" is [SILENCE], 20 hours, not 24: yesterday's 20:00 alert went out a little after 20:00 (the
+ * alarm is inexact, then AEMET is read), and a 24-hour rule would swallow tonight's (review 2026-11-18).
  */
 object RainAlertPolicy {
     const val EVENING_HOUR = 20
     private const val QUIET_FROM = 23
     private const val QUIET_UNTIL = 8
-    val SILENCE: Duration = Duration.ofHours(24)
+    val SILENCE: Duration = Duration.ofHours(20)
+    private val LAST_DAY: Duration = Duration.ofHours(24)
 
     /** [start] is the match's hour, or its day at 00:00 when it has none; [lastAlertAt] the last alert about it. */
     fun due(rain: Int, start: LocalDateTime, now: LocalDateTime, lastAlertAt: LocalDateTime?): Boolean {
         if (rain <= Weather.ALERT_OVER || !start.isAfter(now)) return false
         if (now.hour >= QUIET_FROM || now.hour < QUIET_UNTIL) return false
         if (lastAlertAt != null && Duration.between(lastAlertAt, now) < SILENCE) return false
-        return Duration.between(now, start) <= SILENCE || now.hour >= EVENING_HOUR
+        return Duration.between(now, start) <= LAST_DAY || now.hour >= EVENING_HOUR
     }
 
     /** The next evening check: today's 20:00 if it is still ahead, else tomorrow's. */

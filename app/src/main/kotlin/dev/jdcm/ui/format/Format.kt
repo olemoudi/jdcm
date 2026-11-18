@@ -43,7 +43,11 @@ class Format(private val context: Context) {
     fun statusLabel(m: Match): String? = when (m.status) {
         MatchStatus.POSTPONED -> context.getString(R.string.status_postponed)
         MatchStatus.UNSCHEDULED -> context.getString(R.string.status_unscheduled)
-        MatchStatus.NOT_HELD -> context.getString(if (m.isReplay) R.string.status_replay else R.string.status_not_held)
+        // A replay while it is still to come; once its day has gone by, the site's word stands.
+        MatchStatus.NOT_HELD -> context.getString(
+            if (m.isReplay && dev.jdcm.core.schedule.Schedule.isAhead(m, java.time.LocalDateTime.now(dev.jdcm.core.model.MADRID))) R.string.status_replay
+            else R.string.status_not_held,
+        )
         MatchStatus.PLAYED -> context.getString(if (m.hasResult) R.string.status_final else R.string.status_no_score)
         else -> if (m.hasResult) context.getString(R.string.status_final) else null
     }

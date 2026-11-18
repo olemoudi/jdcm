@@ -18,6 +18,8 @@ import dev.jdcm.diag.DiagLog
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZonedDateTime
@@ -55,7 +57,23 @@ object RainWatch {
      * [Weather.BACKGROUND_MAX_AGE_MS] (owner, 2026-11-18). The 20:00 check always runs — it is the
      * alert's own hour — and every background check reads AEMET at most every 6 hours too.
      */
-    suspend fun check(app: JdcmApp, reason: String, throttled: Boolean = false) {
+    suspend fun check(app: JdcmApp, reason: String, throttled: Boolean = false, deadlineMs: Long = Long.MAX_VALUE) {
+        // One check at a time: two at once (20:00 and a worker) would both alert (review 2026-11-18).
+        val locked = withTimeoutOrNull(LOCK_WAIT_MS) { lock.lock(); true } ?: run {
+            DiagLog.i(TAG, "check $reason: another check is running, skipped")
+            return
+        }
+        try {
+            checkLocked(app, reason, throttled, deadlineMs)
+        } finally {
+            if (locked) lock.unlock()
+        }
+    }
+
+    private val lock = Mutex()
+    private const val LOCK_WAIT_MS = 15_000L
+
+    private suspend fun checkLocked(app: JdcmApp, reason: String, throttled: Boolean, deadlineMs: Long) {
         val c = app.container
         val nowMs = System.currentTimeMillis()
         if (throttled && nowMs - c.settings.lastRainCheckMs in 0 until Weather.BACKGROUND_MAX_AGE_MS) return
@@ -63,7 +81,7 @@ object RainWatch {
         val watched = watched(app, now)
         c.settings.lastRainCheckMs = nowMs
         if (watched.isEmpty()) return
-        c.weather.refreshFor(watched.map { it.second }, reason, if (reason == "switched on") Weather.MAX_AGE_MS else Weather.BACKGROUND_MAX_AGE_MS)
+        c.weather.refreshFor(watched.map { it.second }, reason, if (reason == "switched on") Weather.MAX_AGE_MS else Weather.BACKGROUND_MAX_AGE_MS, deadlineMs)
         if (!c.settings.state.value.rainAlerts) return
         if (!c.notifier.canPost()) {
             DiagLog.i(TAG, "check $reason: alerts on but notifications not allowed")
@@ -75,11 +93,15 @@ object RainWatch {
         for ((kid, m) in watched.distinctBy { it.second.id to it.first.id }) {
             val code = Weather.municipalityFor(m, now) ?: continue
             val w = Weather.forMatch(m, forecasts[code], now) as? MatchWeather.Chance ?: continue
-            val start = m.start?.takeIf { m.timeKnown } ?: m.day?.atStartOfDay() ?: continue
+            val start = Weather.alertStart(m) ?: continue
             val last = alerted[m.id]?.let { Instant.ofEpochMilli(it).atZone(MADRID).toLocalDateTime() }
-            if (!RainAlertPolicy.due(w.rain, start, now, last)) continue
+            if (!RainAlertPolicy.due(w.rain, start, now, last)) {
+                if (w.alerting) DiagLog.i(TAG, "alert held match=#${m.id} rain=${w.rain} hour=${now.hour} lastAgoMin=${last?.let { java.time.Duration.between(it, now).toMinutes() }} reason=$reason")
+                continue
+            }
             c.notifier.rain(kid, m, w)
-            alerted[m.id] = System.currentTimeMillis()
+            // Stamped with the check's own time, the one the policy compares with tomorrow.
+            alerted[m.id] = nowMs
             posted++
             DiagLog.i(TAG, "alert match=#${m.id} rain=${w.rain} stretch=${w.fromHour}-${w.toHour} code=$code reason=$reason")
         }
@@ -92,7 +114,8 @@ object RainWatch {
         val am = app.getSystemService(AlarmManager::class.java)
         val pi = pending(app)
         val now = LocalDateTime.now(MADRID)
-        if (!c.settings.state.value.rainAlerts || watched(app, now).isEmpty()) {
+        // Off with Android's notifications off too: nothing to say, so no waking the phone for it.
+        if (!c.settings.state.value.rainAlerts || !c.notifier.canPost() || watched(app, now).isEmpty()) {
             am.cancel(pi)
             if (c.settings.rainCheckAtMs != 0L) DiagLog.i(TAG, "evening check off")
             c.settings.rainCheckAtMs = 0
@@ -100,7 +123,10 @@ object RainWatch {
         }
         val at = RainAlertPolicy.nextEvening(now)
         val atMs = ZonedDateTime.of(at, MADRID).toInstant().toEpochMilli()
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
+        // Below Android 12 an inexact alarm may come up to 3/4 of the wait late — past 23:00, and the
+        // night rule would drop it: exact there (no permission needed below 12).
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
+        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
         if (c.settings.rainCheckAtMs != atMs) DiagLog.i(TAG, "evening check armed for $at")
         c.settings.rainCheckAtMs = atMs
     }
@@ -111,15 +137,21 @@ object RainWatch {
     )
 }
 
-/** 20:00: read the forecasts, alert what is due, arm tomorrow's. */
+/**
+ * 20:00: read the forecasts, alert what is due, arm tomorrow's. A broadcast has about a minute
+ * (goAsync), so the reads stop starting after [BUDGET_MS] and each has a 10 s ceiling ([WeatherRepo]):
+ * an ANR here would kill the process before tomorrow's alarm is armed (review 2026-11-18).
+ */
 class RainReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         DiagLog.i("Rain", "evening check fired")
         val app = context.applicationContext as JdcmApp
         val done = goAsync()
+        val started = System.currentTimeMillis()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                RainWatch.check(app, "evening")
+                RainWatch.check(app, "evening", deadlineMs = started + BUDGET_MS)
+                DiagLog.i("Rain", "evening check done in ${System.currentTimeMillis() - started}ms")
             } catch (e: Exception) {
                 DiagLog.e("Rain", "evening check failed", e)
             } finally {
@@ -127,5 +159,9 @@ class RainReceiver : BroadcastReceiver() {
                 done.finish()
             }
         }
+    }
+
+    private companion object {
+        const val BUDGET_MS = 30_000L
     }
 }

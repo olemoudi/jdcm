@@ -148,6 +148,11 @@ data class Match(
     val winnerId: Int = 0,
     /** Partial results (quarters, sets) as the site writes them, empty ones dropped. */
     val partials: List<String> = emptyList(),
+    /**
+     * The day it was on when this app saw it go «No Celebrado» (set by [GroupSnapshot.merge]); null
+     * when it was never seen otherwise. What tells a replay from a match rained off on its own day.
+     */
+    @Serializable(with = LocalDateSerializer::class) val notHeldOn: LocalDate? = null,
     /** The minutes are closed: the result is final. */
     val closed: Boolean = false,
     /** Date, time or venue were changed by the organisation or by an accepted request. */
@@ -173,10 +178,18 @@ data class Match(
      * A match that was not held (rain) and has been given a later day: its replay. The site leaves
      * it «No Celebrado» (state 6) with the new date (seen 2026-11-18: rained off on 14 Nov, replayed
      * on Thursday 10 Dec), so the state alone would call off a match that is going to be played.
+     *
+     * Later than what: the day it was on when the app saw it called off ([notHeldOn]); failing that
+     * (first seen already off), after its round's weekend — the round is dated on its Saturday, so
+     * a Sunday match rained off on its Sunday is not a replay (review 2026-11-18).
      */
     val isReplay: Boolean
-        get() = status == MatchStatus.NOT_HELD && !hasResult &&
-            start?.toLocalDate()?.let { d -> roundDate?.let { d.isAfter(it) } } == true
+        get() {
+            if (status != MatchStatus.NOT_HELD || hasResult) return false
+            val d = start?.toLocalDate() ?: return false
+            val offOn = notHeldOn ?: roundDate?.plusDays(1) ?: return false
+            return d.isAfter(offOn)
+        }
 
     /** Postponed, taken off the calendar or not held: nobody turns up for it. A replay is on. */
     val isCancelled: Boolean

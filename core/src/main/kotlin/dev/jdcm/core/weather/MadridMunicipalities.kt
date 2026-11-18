@@ -208,14 +208,15 @@ object MadridMunicipalities {
     /** The municipality of a place named by the site ("Madrid", "San Sebastián de los Reyes"), or null. */
     fun codeFor(town: String, postcode: String = ""): String? {
         val t = normalise(town)
-        if (t.isNotEmpty()) {
-            BY_NAME[t]?.let { return it }
-            // "Las Rozas" for "Las Rozas de Madrid", "San Lorenzo" for "San Lorenzo de El Escorial":
-            // one municipality whose name starts with the town said, and only one.
-            BY_NAME.filterKeys { it.startsWith("$t ") }.values.toSet().singleOrNull()?.let { return it }
-        }
+        if (t.isNotEmpty()) BY_NAME[t]?.let { return it }
+        // A capital postcode beats a guess from the start of a name: «Moraleja» at 28050 is a
+        // neighbourhood of Madrid, not Moraleja de Enmedio (review 2026-11-18).
         val pc = postcode.trim().toIntOrNull()
-        return if (pc != null && pc in CAPITAL_POSTCODES) MADRID else null
+        if (pc != null && pc in CAPITAL_POSTCODES) return MADRID
+        if (t.isEmpty()) return null
+        // "Las Rozas" for "Las Rozas de Madrid", "San Lorenzo" for "San Lorenzo de El Escorial":
+        // one municipality whose name starts with the town said, and only one.
+        return BY_NAME.filterKeys { it.startsWith("$t ") }.values.toSet().singleOrNull()
     }
 
     fun normalise(s: String): String =

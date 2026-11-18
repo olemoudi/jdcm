@@ -113,7 +113,9 @@ object Reminders {
             return
         }
         val atMs = ZonedDateTime.of(due.first, MADRID).toInstant().toEpochMilli().coerceAtLeast(System.currentTimeMillis() + 5_000)
-        am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
+        // Below Android 12 an inexact alarm may come up to 3/4 of the wait late (hours); exact needs no permission there.
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
+        else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, atMs, pi)
         DiagLog.i(TAG, "armed for ${due.first} matches=${due.second.map { it.second.id }}")
     }
 

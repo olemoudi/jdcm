@@ -129,7 +129,8 @@ class Notifier(private val context: Context, private val settings: Settings) {
      * card left from yesterday's is taken down first (an update would be silent: setOnlyAlertOnce).
      */
     fun rain(kid: Kid, m: Match, w: MatchWeather.Chance) {
-        val id = notificationId(m.id, 5)
+        // Kind 6: its own card, apart from a status change's (5) — a rain-off must sound, not update this one.
+        val id = notificationId(m.id, 6)
         runCatching { NotificationManagerCompat.from(context).cancel(id) }
         val text = context.getString(R.string.notif_rain_text, w.rain, fmt.whenLine(m), w.place.ifBlank { m.venue?.town.orEmpty() })
         post(CH_RAIN, id, context.getString(R.string.notif_rain_title, kid.name), text, kid, m, "Rain")
