@@ -81,13 +81,33 @@ class ChangesAndScheduleTest {
     }
 
     @Test
-    fun `friday evening games belong to the saturday's matchday, and the focus holds until monday`() {
-        assertEquals(LocalDate.of(2026, 11, 14), Schedule.weekendOf(LocalDate.of(2026, 11, 13)))
-        assertEquals(LocalDate.of(2026, 11, 14), Schedule.weekendOf(LocalDate.of(2026, 11, 15)))
-        val days = listOf(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 21))
-        assertEquals(days[0], Schedule.focusMatchday(days, LocalDate.of(2026, 11, 16)))
-        assertEquals(days[1], Schedule.focusMatchday(days, LocalDate.of(2026, 11, 17)))
-        assertEquals(days[1], Schedule.focusMatchday(days, LocalDate.of(2027, 3, 1)), "after the season: the last one")
+    fun `the strip is every date a child plays on, weekend or not, and a rest on its round's day`() {
+        val mine = team(1)
+        val sat = match(1, mine, team(2), start = LocalDateTime.of(2026, 11, 14, 10, 30), round = 1)
+        val thursdayReplay = match(2, mine, team(3), start = LocalDateTime.of(2026, 12, 10, 18, 30), round = 1)
+        val sunday = match(3, mine, team(4), start = LocalDateTime.of(2026, 11, 22, 12, 0), round = 2)
+        val rest = match(4, mine, null, start = null, round = 3).copy(roundDate = LocalDate.of(2026, 11, 28))
+        val someoneElse = match(5, team(7), team(8), start = LocalDateTime.of(2026, 11, 21, 9, 0), round = 2)
+        val s = snapshot(listOf(sat, thursdayReplay, sunday, rest, someoneElse))
+        assertEquals(
+            listOf(LocalDate.of(2026, 11, 14), LocalDate.of(2026, 11, 22), LocalDate.of(2026, 11, 28), LocalDate.of(2026, 12, 10)),
+            Schedule.matchDates(listOf(s to mine.id)),
+            "Thursday the 10th is its own date; another team's Saturday is not one of this child's",
+        )
+        val dates = Schedule.matchDates(listOf(s to mine.id))
+        assertEquals(LocalDate.of(2026, 11, 22), Schedule.focusDate(dates, LocalDate.of(2026, 11, 18)))
+        assertEquals(LocalDate.of(2026, 11, 22), Schedule.focusDate(dates, LocalDate.of(2026, 11, 22)), "today's, all day")
+        assertEquals(LocalDate.of(2026, 12, 10), Schedule.focusDate(dates, LocalDate.of(2027, 3, 1)), "after the season: the last one")
+    }
+
+    @Test
+    fun `a rained-off match given a later day is a replay, and on`() {
+        val rainedOff = match(1, team(1), team(2), status = "No Celebrado/Incompleto", statusId = 6)
+        assertTrue(rainedOff.isCancelled, "on its own day: called off")
+        val replay = rainedOff.copy(start = LocalDateTime.of(2026, 12, 10, 18, 30))
+        assertTrue(replay.isReplay)
+        assertFalse(replay.isCancelled, "the replay is going to be played")
+        assertFalse(replay.copy(homeScore = 3, awayScore = 1).isReplay, "with a ruling it is a result, not a replay")
     }
 
     @Test
@@ -98,11 +118,4 @@ class ChangesAndScheduleTest {
         assertFalse(RefreshPolicy.isMatchWindow(LocalDateTime.of(2026, 11, 16, 15, 0)))
     }
 
-    @Test
-    fun `a match replayed weeks later is listed on its own weekend, a sunday one with its round`() {
-        val replay = match(1, team(1), team(2)).copy(start = LocalDateTime.of(2026, 12, 13, 11, 0))
-        assertEquals(java.time.LocalDate.of(2026, 12, 12), Schedule.matchdayOf(replay))
-        val sunday = match(2, team(1), team(2)).copy(start = LocalDateTime.of(2026, 11, 15, 11, 0))
-        assertEquals(java.time.LocalDate.of(2026, 11, 14), Schedule.matchdayOf(sunday))
-    }
 }

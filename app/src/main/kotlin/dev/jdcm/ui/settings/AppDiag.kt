@@ -78,7 +78,7 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
     // The rain forecast: what was read from AEMET (codes, never places) and what each watched match got.
     val forecasts = c.weather.forecasts.value
     val weather = listOf(
-        "rainAlerts=${s.rainAlerts} eveningCheck=${at(c.settings.rainCheckAtMs)} alertedMatches=${c.settings.rainAlerted.size}",
+        "rainAlerts=${s.rainAlerts} lastCheck=${at(c.settings.lastRainCheckMs)} eveningCheck=${at(c.settings.rainCheckAtMs)} alertedMatches=${c.settings.rainAlerted.size}",
     ) + forecasts.values.sortedBy { it.code }.map { f ->
         "aemet ${f.code} read=${at(f.fetchedAtMs)} made=${f.elaborated} stretches=${f.periods.size}"
     } + dev.jdcm.notify.RainWatch.watched(kids, snaps, now).take(6).map { (k, m) ->

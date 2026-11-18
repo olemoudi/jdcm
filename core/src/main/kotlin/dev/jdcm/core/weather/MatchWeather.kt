@@ -32,8 +32,11 @@ object Weather {
     /** A chance of rain over this (strictly) is worth an alert, if the family asked for them (owner). */
     const val ALERT_OVER = 60
 
-    /** How old a municipality's forecast may be before it is read again: AEMET makes a new one a few times a day. */
+    /** How old a municipality's forecast may be before Home reads it again: AEMET makes a new one a few times a day. */
     const val MAX_AGE_MS = 2 * 60 * 60_000L
+
+    /** In the background, forecasts are read — and rain checks run — at most this often (owner, 2026-11-18). */
+    const val BACKGROUND_MAX_AGE_MS = 6 * 60 * 60_000L
 
     /**
      * Whether a venue is under a roof. The site writes it after the last dash of the name —

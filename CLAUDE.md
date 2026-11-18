@@ -15,8 +15,8 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
 - `:core` — pure JVM, everything with logic, all unit-tested:
   `model/` (Match, Team, Round, `GroupSnapshot` = what is cached per group, `MatchStatus`),
   `parse/SiteParser` (tolerant JSON reader; the MVC actions return a JSON *string* holding JSON),
-  `standings/Standings` + `PointsRule`, `schedule/Schedule` (next/last match, matchdays anchored on
-  Saturday), `changes/MatchChanges` (what to notify), `policy/RefreshPolicy` (when and which rounds),
+  `standings/Standings` + `PointsRule`, `schedule/Schedule` (next/last match, the dates a child plays
+  on), `changes/MatchChanges` (what to notify), `policy/RefreshPolicy` (when and which rounds),
   `policy/PreMatchPolicy` (the last hours before a child's match).
   Real responses from the site are fixtures in `core/src/test/resources/fixtures/`.
 - `:app` — `data/` (`EcmApi`: one request at a time, 350 ms apart, honest User-Agent, retries;
@@ -52,8 +52,13 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   `SyncWorker` (Android 12+) in `SyncMode.PRE_MATCH`; re-armed with the reminder. Off when change
   notifications are off (in the app or in Android). Diagnostics → «Pre-match checks». Verified on the AVD in deep Doze.
 - **Replays**: a rescheduled match keeps its round, so `RefreshPolicy.distanceDays` measures a round by
-  its date *or* any of its matches' own dates (the old round is hot while its replay is near), and
-  `Schedule.matchdayOf` lists a match moved > 3 days from its round on its own weekend.
+  its date *or* any of its matches' own dates (the old round is hot while its replay is near). The site
+  leaves a rained-off match «No Celebrado» (state 6) when it gives it a new date (seen 2026-11-18:
+  14 Nov → Thu 10 Dec): `Match.isReplay` (state 6, no result, own date after its round's) is *on* —
+  not `isCancelled` — shown «Recuperación», with reminder, pre-match checks and forecast.
+- **Home's strip is every date a child plays on** (owner, 2026-11-18), weekend or not
+  (`Schedule.matchDates`; a rest on its round's day); a date shows the child's match that day and the
+  rest of its round. Opens on today's or the next date (`focusDate`).
 
 - **Rain forecast** (owner, 2026-11-18; `core/weather/`, `data/WeatherRepo`, `notify/RainWatch`): AEMET's
   public, keyless municipal XML `https://www.aemet.es/xml/municipios/localidad_<INE>.xml` (ISO-8859-15;
@@ -62,8 +67,10 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   orders; Madrid's postcodes 28001–28055 as fallback). Shown (card + sheet) only for matches < 4 days
   ahead, still on: «Se juega: 100 − lluvia %». A venue whose name has a roof word — cubiert*, techad*,
   techo, pabellón, gimnasio (not «interior»: a patio interior is open) — reads «se juega aunque llueva»
-  and needs no forecast. Read only for the children's matches in the window, ≤ every 2 h per
-  municipality, one request a second. **Alerts** (Settings switch, off by default): over 60 %
+  and needs no forecast. Read only for the children's matches in the window, per municipality ≤ every
+  2 h with Home open and ≤ every 6 h in the background, one request a second; background rain checks
+  (worker, pre-match) run at most every 6 h (owner, 2026-11-18), the 20:00 one always. **Alerts**
+  (Settings switch, **on by default** — opt-out, owner 2026-11-18): over 60 %
   (strictly); on the days before at 20:00 (one inexact alarm, `RainReceiver`), in the last 24 h as soon
   as a check sees it (worker, pre-match, evening); one per match per 24 h; none 23:00–08:00; every
   alert sounds (yesterday's card cancelled first) and carries the current %.

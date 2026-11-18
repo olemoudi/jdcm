@@ -28,7 +28,8 @@ import java.time.LocalDateTime
  * AEMET's public municipal forecast, without a key: `https://www.aemet.es/xml/municipios/localidad_<code>.xml`
  * (owner, 2026-11-18). One file per municipality covers seven days; the app reads only the chance of
  * rain, only for the municipalities of the children's matches in the next [Weather.SHOW_DAYS] days,
- * and never more often than every [Weather.MAX_AGE_MS] (AEMET makes a few a day). One request at a
+ * and never more often than every [Weather.MAX_AGE_MS] with Home open, [Weather.BACKGROUND_MAX_AGE_MS]
+ * in the background (AEMET makes a few a day). One request at a
  * time, a second apart, with the app's honest User-Agent; the forecasts are kept on disk so Home
  * shows the last one read when it opens offline.
  */
@@ -51,12 +52,12 @@ class WeatherRepo(context: android.content.Context, private val http: OkHttpClie
      * failures (a forecast is a nicety): the last one read stays, and the next call tries again.
      * Returns how many were read.
      */
-    suspend fun refreshFor(matches: Collection<Match>, reason: String): Int = gate.withLock {
+    suspend fun refreshFor(matches: Collection<Match>, reason: String, maxAgeMs: Long = Weather.MAX_AGE_MS): Int = gate.withLock {
         load()
         val now = LocalDateTime.now(MADRID)
         val nowMs = System.currentTimeMillis()
         val codes = matches.mapNotNull { Weather.municipalityFor(it, now) }.toSet()
-        val due = codes.filter { code -> mutable.value[code]?.let { nowMs - it.fetchedAtMs !in 0 until Weather.MAX_AGE_MS } ?: true }
+        val due = codes.filter { code -> mutable.value[code]?.let { nowMs - it.fetchedAtMs !in 0 until maxAgeMs } ?: true }
         if (due.isEmpty()) return@withLock 0
         var read = 0
         for ((i, code) in due.withIndex()) {

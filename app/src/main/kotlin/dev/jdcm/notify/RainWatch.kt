@@ -49,13 +49,21 @@ object RainWatch {
         return watched(kids, c.repository.snapshots.value, now)
     }
 
-    /** Reads what is due and alerts what [RainAlertPolicy] allows. [reason] is for the report. */
-    suspend fun check(app: JdcmApp, reason: String) {
+    /**
+     * Reads what is due and alerts what [RainAlertPolicy] allows. [reason] is for the report.
+     * [throttled] (the hourly worker, the pre-match runs): at most one check every
+     * [Weather.BACKGROUND_MAX_AGE_MS] (owner, 2026-11-18). The 20:00 check always runs — it is the
+     * alert's own hour — and every background check reads AEMET at most every 6 hours too.
+     */
+    suspend fun check(app: JdcmApp, reason: String, throttled: Boolean = false) {
         val c = app.container
+        val nowMs = System.currentTimeMillis()
+        if (throttled && nowMs - c.settings.lastRainCheckMs in 0 until Weather.BACKGROUND_MAX_AGE_MS) return
         val now = LocalDateTime.now(MADRID)
         val watched = watched(app, now)
+        c.settings.lastRainCheckMs = nowMs
         if (watched.isEmpty()) return
-        c.weather.refreshFor(watched.map { it.second }, reason)
+        c.weather.refreshFor(watched.map { it.second }, reason, if (reason == "switched on") Weather.MAX_AGE_MS else Weather.BACKGROUND_MAX_AGE_MS)
         if (!c.settings.state.value.rainAlerts) return
         if (!c.notifier.canPost()) {
             DiagLog.i(TAG, "check $reason: alerts on but notifications not allowed")

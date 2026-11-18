@@ -124,8 +124,9 @@ fun HomeScreen(
     val kids = kidsOrNull.orEmpty()
     val visible = if (selectedKid == null) kids else kids.filter { it.id == selectedKid }.ifEmpty { kids }
     val today = LocalDate.now(MADRID)
-    val days = remember(visible, snaps) { Schedule.matchdays(visible.mapNotNull { snaps[it.groupId] }) }
-    val focus = remember(days, today) { Schedule.focusMatchday(days, today) }
+    // Every date a visible child plays on, weekend or not (0.2.5).
+    val days = remember(visible, snaps) { Schedule.matchDates(visible.mapNotNull { k -> snaps[k.groupId]?.let { it to k.teamId } }) }
+    val focus = remember(days, today) { Schedule.focusDate(days, today) }
     val day = pickedDay?.let(LocalDate::ofEpochDay)?.takeIf { it in days } ?: focus
 
     Scaffold(
@@ -176,7 +177,7 @@ fun HomeScreen(
                                 current = focus,
                                 today = today,
                                 dotsFor = { d ->
-                                    visible.filter { k -> snaps[k.groupId]?.matches?.any { it.involves(k.teamId) && !it.isBye && Schedule.matchdayOf(it) == d } == true }
+                                    visible.filter { k -> snaps[k.groupId]?.teamMatches(k.teamId)?.any { !it.isBye && it.day == d } == true }
                                         .map { kidColor(it.color) }
                                 },
                                 onSelect = { pickedDay = it.toEpochDay() },
@@ -204,7 +205,7 @@ fun HomeScreen(
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { ms ->
                         val d = Instant.ofEpochMilli(ms).atZone(ZoneOffset.UTC).toLocalDate()
-                        val target = days.firstOrNull { !it.plusDays(1).isBefore(d) } ?: days.lastOrNull()
+                        val target = days.firstOrNull { !it.isBefore(d) } ?: days.lastOrNull()
                         pickedDay = target?.toEpochDay()
                     }
                     showPicker = false
@@ -261,11 +262,11 @@ private fun LazyListScope.kidSection(
                 }
                 return@Column
             }
-            val matches = remember(snap, day) {
-                snap.matches.filter { Schedule.matchdayOf(it) == day }.sortedWith(MatchOrder)
+            // The child's match on that date (or their rest), and the rest of its round, whatever days those are on.
+            val mine = remember(snap, day) { snap.teamMatches(kid.teamId).filter { it.day == day }.sortedWith(MatchOrder).firstOrNull() }
+            val others = remember(snap, mine) {
+                mine?.let { m -> snap.matches.filter { it.roundId == m.roundId && it.id != m.id }.sortedWith(MatchOrder) }.orEmpty()
             }
-            val mine = matches.firstOrNull { it.involves(kid.teamId) }
-            val others = matches.filter { it !== mine }
             val forecasts by dev.jdcm.ui.LocalContainer.current.weather.forecasts.collectAsState()
             val weather = remember(mine, forecasts) {
                 mine?.let { dev.jdcm.core.weather.Weather.forMatch(it, forecasts, java.time.LocalDateTime.now(MADRID)) }
@@ -330,7 +331,7 @@ private fun NoMatchRow(kid: Kid, snap: GroupSnapshot, day: LocalDate?) {
     val ctx = LocalContext.current
     val fmt = remember(ctx) { Format(ctx) }
     val next = remember(snap, day) {
-        day?.let { d -> snap.teamMatches(kid.teamId).firstOrNull { m -> !m.isBye && (Schedule.matchdayOf(m)?.isAfter(d) == true) } }
+        day?.let { d -> snap.teamMatches(kid.teamId).filter { m -> !m.isBye && m.day?.isAfter(d) == true }.minByOrNull { it.day!! } }
     }
     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
         Icon(Icons.Outlined.EventBusy, null, tint = JdcmColors.extra.muted)

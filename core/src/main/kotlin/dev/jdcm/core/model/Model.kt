@@ -169,9 +169,18 @@ data class Match(
         else -> null
     }
 
-    /** Postponed, taken off the calendar or not held: nobody turns up for it. */
+    /**
+     * A match that was not held (rain) and has been given a later day: its replay. The site leaves
+     * it «No Celebrado» (state 6) with the new date (seen 2026-11-18: rained off on 14 Nov, replayed
+     * on Thursday 10 Dec), so the state alone would call off a match that is going to be played.
+     */
+    val isReplay: Boolean
+        get() = status == MatchStatus.NOT_HELD && !hasResult &&
+            start?.toLocalDate()?.let { d -> roundDate?.let { d.isAfter(it) } } == true
+
+    /** Postponed, taken off the calendar or not held: nobody turns up for it. A replay is on. */
     val isCancelled: Boolean
-        get() = status == MatchStatus.POSTPONED || status == MatchStatus.UNSCHEDULED || status == MatchStatus.NOT_HELD
+        get() = status == MatchStatus.POSTPONED || status == MatchStatus.UNSCHEDULED || (status == MatchStatus.NOT_HELD && !isReplay)
 
     /**
      * Whether the score is a real, published result. A match the site still calls "pending"

@@ -42,7 +42,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         val outcomes = c.repository.syncKids(SyncMode.BACKGROUND, "worker")
         c.settings.lastBackgroundSyncMs = System.currentTimeMillis()
         // The rain forecast for the children's next matches, and its alerts (RainWatch).
-        runCatching { RainWatch.check(app, "worker") }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
+        runCatching { RainWatch.check(app, "worker", throttled = true) }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
         // The repository re-arms the reminder after any sync that brought data (from here or a screen).
         DiagLog.i(TAG, "end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()
@@ -58,7 +58,7 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         }
         DiagLog.i(TAG, "pre-match run attempt=$runAttemptCount groups=${groups.map { "#$it" }} late=${(started - app.container.settings.preMatchLastCheckMs) / 1000}s")
         val outcomes = app.container.repository.syncKidGroups(groups, SyncMode.PRE_MATCH, "pre-match")
-        runCatching { RainWatch.check(app, "pre-match") }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
+        runCatching { RainWatch.check(app, "pre-match", throttled = true) }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
         DiagLog.i(TAG, "pre-match end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()
     }

@@ -1,0 +1,4 @@
+{
+  "es": "• La tira de fechas muestra cada día con partido, sea fin de semana o no: un partido en jueves sale en su jueves.\n• Los partidos suspendidos con fecha nueva salen como «Recuperación», con recordatorio, revisiones previas y previsión de lluvia.\n• El aviso de lluvia de AEMET viene activado; se apaga en Ajustes. Se consulta como mucho cada 6 h en segundo plano.",
+  "en": "• The date strip shows every day with a match, weekend or not: a Thursday match shows on its Thursday.\n• Rained-off matches given a new date show as «Replay», with the reminder, pre-match checks and rain forecast.\n• AEMET's rain alert is now on by default; switch it off in Settings. In the background it checks at most every 6 h."
+}

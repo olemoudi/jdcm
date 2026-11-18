@@ -25,7 +25,6 @@
     <string name="all_kids">All</string>
     <string name="see_today">Today</string>
     <string name="pick_date">Pick a date</string>
-    <string name="this_weekend_short">Wknd</string>
     <string name="today_short">Today</string>
     <string name="position_points">#%1$d · %2$d pts</string>
     <string name="rest_of_round">Rest of the round (%1$d)</string>
@@ -33,7 +32,7 @@
     <string name="link_standings">Standings</string>
     <string name="link_team">Team</string>
     <string name="open_group">Open the group</string>
-    <string name="no_match_this_round">%1$s has no match this round</string>
+    <string name="no_match_this_round">%1$s has no match that day</string>
     <string name="next_on">Next match: %1$s</string>
     <string name="rests">Rests</string>
     <string name="no_date">No date</string>
@@ -46,6 +45,7 @@
     <string name="status_modified">Changed</string>
     <string name="status_postponed">Postponed</string>
     <string name="status_unscheduled">Off the calendar</string>
+    <string name="status_replay">Replay</string>
     <string name="status_not_held">Not played</string>
     <string name="modified_explained">The organisers changed the date, time or venue.</string>
     <string name="unscheduled_explained">Waiting for a new date. The app will tell you when it has one.</string>
@@ -226,6 +226,6 @@
     <string name="res_loss">Lost %1$d-%2$d</string>
     <string name="vs_team">against %1$s</string>
     <string name="not_loaded">No data for this group yet.</string>
-    <string name="strip_legend_one">= plays that weekend</string>
-    <string name="strip_legend_many">= play that weekend</string>
+    <string name="strip_legend_one">= plays that day</string>
+    <string name="strip_legend_many">= play that day</string>
 </resources>

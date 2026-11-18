@@ -53,8 +53,8 @@ import dev.jdcm.ui.theme.kidColor
 import java.time.LocalDate
 
 /**
- * Marca's day strip, made for a weekend league: one cell per matchday (its Saturday), the month
- * above, "Ver hoy" and a calendar to jump. Coloured dots under a day say which children play.
+ * Marca's day strip: one cell per date a child plays on, weekend or not (0.2.5), the weekday above,
+ * the month over the strip, "Ver hoy" and a calendar to jump. Coloured dots say which children play.
  */
 @Composable
 fun MatchdayStrip(
@@ -96,12 +96,8 @@ fun MatchdayStrip(
             itemsIndexed(days, key = { _, d -> d.toEpochDay() }) { _, d ->
                 val isSel = d == selected
                 val isCurrent = d == current
-                val thisWeekend = !today.isBefore(d.minusDays(1)) && !today.isAfter(d.plusDays(1))
-                val top = when {
-                    d == today -> stringResource(R.string.today_short)
-                    thisWeekend -> stringResource(R.string.this_weekend_short)
-                    else -> fmt.monthShort(d)
-                }
+                val isToday = d == today
+                val top = if (d == today) stringResource(R.string.today_short) else fmt.weekdayShort(d).lowercase()
                 Column(
                     Modifier
                         .width(60.dp)
@@ -117,17 +113,17 @@ fun MatchdayStrip(
                         style = MaterialTheme.typography.labelMedium,
                         color = when {
                             isSel -> MaterialTheme.colorScheme.onPrimary
-                            isCurrent || thisWeekend -> MaterialTheme.colorScheme.primary
+                            isCurrent || isToday -> MaterialTheme.colorScheme.primary
                             else -> extra.muted
                         },
-                        fontWeight = if (isCurrent || thisWeekend) FontWeight.Bold else FontWeight.Normal,
+                        fontWeight = if (isCurrent || isToday) FontWeight.Bold else FontWeight.Normal,
                     )
                     Text(
                         d.dayOfMonth.toString(),
                         style = MaterialTheme.typography.headlineSmall.merge(Tabular),
                         color = when {
                             isSel -> MaterialTheme.colorScheme.onPrimary
-                            isCurrent || thisWeekend -> MaterialTheme.colorScheme.primary
+                            isCurrent || isToday -> MaterialTheme.colorScheme.primary
                             else -> MaterialTheme.colorScheme.onSurface
                         },
                         fontWeight = if (isSel || isCurrent) FontWeight.Bold else FontWeight.Normal,

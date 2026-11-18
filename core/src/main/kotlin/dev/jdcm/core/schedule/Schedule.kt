@@ -7,7 +7,6 @@ import dev.jdcm.core.model.MatchStatus
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalDateTime
-import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 
 /** What a team has coming and what it has done, as a family reads it. */
@@ -35,28 +34,17 @@ object Schedule {
     }
 
     /**
-     * The matchday a match is listed under: its round's weekend, else its own — and its own when
-     * it was moved more than [MOVED_DAYS] days away from its round (a rained-off match replayed
-     * weeks later keeps its round but is played, and must be shown, on its new weekend).
+     * Every date the given teams play on, ascending: the strip on Home (owner, 2026-11-18: «todas las
+     * fechas en las que haya partido, sea finde o no»). A match on its own day (a replay on the day it
+     * is replayed, not its round's); a rest on its round's day, so a weekend off still says «descansa».
+     * [entries] are each child's group and team.
      */
-    fun matchdayOf(m: Match): LocalDate? {
-        val own = m.start?.toLocalDate()
-        val round = m.roundDate
-        val day = if (own != null && round != null && kotlin.math.abs(ChronoUnit.DAYS.between(round, own)) > MOVED_DAYS) own else round ?: m.day
-        return day?.let(::weekendOf)
-    }
+    fun matchDates(entries: Collection<Pair<GroupSnapshot, Int>>): List<LocalDate> =
+        entries.flatMap { (s, team) -> s.teamMatches(team).mapNotNull { it.day } }.distinct().sorted()
 
-    private const val MOVED_DAYS = 3L
-
-    /** Distinct matchdays (Saturdays) of these groups, ascending. */
-    fun matchdays(snapshots: Collection<GroupSnapshot>): List<LocalDate> =
-        snapshots.flatMap { s -> s.rounds.mapNotNull { it.date?.let(::weekendOf) } + s.matches.mapNotNull(::matchdayOf) }
-            .distinct()
-            .sorted()
-
-    /** The matchday to show on opening: this weekend until Monday night, else the next one, else the last. */
-    fun focusMatchday(days: List<LocalDate>, today: LocalDate): LocalDate? =
-        days.firstOrNull { !it.plusDays(2).isBefore(today) } ?: days.lastOrNull()
+    /** The date to show on opening: today's or the next one with a match, else the last there was. */
+    fun focusDate(dates: List<LocalDate>, today: LocalDate): LocalDate? =
+        dates.firstOrNull { !it.isBefore(today) } ?: dates.lastOrNull()
 
     fun isAhead(m: Match, now: LocalDateTime): Boolean {
         val start = m.start

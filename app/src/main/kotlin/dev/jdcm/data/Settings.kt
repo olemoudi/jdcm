@@ -17,8 +17,8 @@ data class SettingsState(
     val reminderHour: Int = 20,
     /** Explorer: also list competitions the site closed. */
     val showClosed: Boolean = false,
-    /** Alert when AEMET gives a child's match over 60 % of rain (off unless asked for: owner, 2026-11-18). */
-    val rainAlerts: Boolean = false,
+    /** Alert when AEMET gives a child's match over 60 % of rain. On for everybody, off in Settings (owner, 2026-11-18). */
+    val rainAlerts: Boolean = true,
 )
 
 /** Small, synchronous preferences (SharedPreferences), exposed as one state flow. */
@@ -40,7 +40,7 @@ class Settings(context: Context) {
         notifyReminder = p.getBoolean("notifyReminder", true),
         reminderHour = p.getInt("reminderHour", 20).coerceIn(17, 22),
         showClosed = p.getBoolean("showClosed", false),
-        rainAlerts = p.getBoolean("rainAlerts", false),
+        rainAlerts = p.getBoolean("rainAlerts", true),
     )
 
     fun update(f: (SettingsState) -> SettingsState) {
@@ -108,6 +108,11 @@ class Settings(context: Context) {
             id to at
         }.toMap()
         set(v) = d.edit { putStringSet("rainAlerted", v.entries.sortedBy { it.value }.takeLast(40).map { "${it.key}:${it.value}" }.toSet()) }
+
+    /** When the last rain check ran: the background ones wait 6 hours between them (RainWatch). */
+    var lastRainCheckMs: Long
+        get() = d.getLong("lastRainCheck", 0)
+        set(v) = d.edit { putLong("lastRainCheck", v) }
 
     /** When the evening rain check is set to go off (0 = none), for the diagnostic report. */
     var rainCheckAtMs: Long
