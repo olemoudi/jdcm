@@ -19,6 +19,8 @@ data class SettingsState(
     val showClosed: Boolean = false,
     /** Alert when AEMET gives a child's match over 60 % of rain. On for everybody, off in Settings (owner, 2026-11-18). */
     val rainAlerts: Boolean = true,
+    /** Two children at nearly the same time in different places: Home's card and the eve reminder's line. On for everybody, off in Settings (owner, 2026-11-19). */
+    val clashAlerts: Boolean = true,
 )
 
 /** Small, synchronous preferences (SharedPreferences), exposed as one state flow. */
@@ -41,6 +43,7 @@ class Settings(context: Context) {
         reminderHour = p.getInt("reminderHour", 20).coerceIn(17, 22),
         showClosed = p.getBoolean("showClosed", false),
         rainAlerts = p.getBoolean("rainAlerts", true),
+        clashAlerts = p.getBoolean("clashAlerts", true),
     )
 
     fun update(f: (SettingsState) -> SettingsState) {
@@ -53,6 +56,7 @@ class Settings(context: Context) {
             putInt("reminderHour", n.reminderHour)
             putBoolean("showClosed", n.showClosed)
             putBoolean("rainAlerts", n.rainAlerts)
+            putBoolean("clashAlerts", n.clashAlerts)
         }
         mutable.value = n
     }
@@ -158,10 +162,18 @@ class Settings(context: Context) {
         get() = d.getInt("activeSeasonId", 0).coerceAtLeast(EcmApi.SEASON_ID)
         set(v) = d.edit { putInt("activeSeasonId", v) }
 
-    /** «TEMPORADA 2027-2028», as the site names [activeSeasonId]; empty while it is the build's own. */
+    /**
+     * «TEMPORADA 2027-2028», as the site names [activeSeasonId]; empty while it is the build's own (also
+     * when a later build raised the floor above the season stored: that name is another season's).
+     */
     var activeSeasonName: String
-        get() = d.getString("activeSeasonName", "").orEmpty()
+        get() = if (d.getInt("activeSeasonId", 0) >= EcmApi.SEASON_ID) d.getString("activeSeasonName", "").orEmpty() else ""
         set(v) = d.edit { putString("activeSeasonName", v) }
+
+    /** A season the site showed once and not yet confirmed by a second read (0 = none). */
+    var seasonPendingId: Int
+        get() = d.getInt("seasonPendingId", 0)
+        set(v) = d.edit { putInt("seasonPendingId", v) }
 
     /** When the season was last looked up (or, after a failure, a day before it may be tried again). */
     var seasonCheckedMs: Long

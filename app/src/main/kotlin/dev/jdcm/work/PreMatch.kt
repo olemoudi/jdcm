@@ -125,7 +125,7 @@ class PreMatchReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 PreMatch.fire(app)
-            } catch (e: Exception) {
+            } catch (e: Throwable) { // Errors too: a receiver that throws takes the process down
                 DiagLog.e("PreMatch", "fire failed", e)
             } finally {
                 done.finish()

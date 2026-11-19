@@ -152,7 +152,7 @@ class RainReceiver : BroadcastReceiver() {
             try {
                 RainWatch.check(app, "evening", deadlineMs = started + BUDGET_MS)
                 DiagLog.i("Rain", "evening check done in ${System.currentTimeMillis() - started}ms")
-            } catch (e: Exception) {
+            } catch (e: Throwable) { // Errors too: a receiver that throws takes the process down
                 DiagLog.e("Rain", "evening check failed", e)
             } finally {
                 runCatching { RainWatch.arm(app) }.onFailure { DiagLog.e("Rain", "arm failed", it) }

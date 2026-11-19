@@ -55,6 +55,41 @@ class FamilyContextTest {
     }
 
     @Test
+    fun `a tie is told as such, with no move`() {
+        val before = snapshot(listOf(match(1, mine, other), played(2, third, fourth, 1, 1)))
+        val after = snapshot(listOf(played(1, mine, other, 2, 2), played(2, third, fourth, 1, 1)))
+        val c = MatchChanges.between(before, after, setOf(mine.id), LocalDateTime.of(2026, 11, 14, 13, 0)).single() as MatchChange.ResultIn
+        assertEquals(1, c.place?.position)
+        assertTrue(c.place!!.tied, "level with the other team on every criterion")
+        assertEquals(0, c.place!!.moved)
+    }
+
+    @Test
+    fun `no place while rounds are missing, and the move counts from today's table`() {
+        val before = snapshot(listOf(match(1, mine, other)))
+        val after = snapshot(listOf(played(1, mine, other, 3, 0)))
+        val partial = after.copy(rounds = after.rounds + dev.jdcm.core.model.Round(199, 9, null))
+        val c = MatchChanges.between(before, partial, setOf(mine.id), LocalDateTime.of(2026, 11, 14, 13, 0)).single() as MatchChange.ResultIn
+        assertNull(c.place, "a round never fetched: the table may be wrong")
+        // An older copy missing a round must not invent a move: the base is today's matches minus the new result.
+        val r1 = played(5, mine, third, 0, 4, round = 1)
+        val stale = snapshot(listOf(match(6, mine, other, round = 2, start = LocalDateTime.of(2026, 11, 21, 10, 0))))
+        val now = snapshot(listOf(r1, played(6, mine, other, 1, 0, round = 2)))
+        val d = MatchChanges.between(stale, now, setOf(mine.id), LocalDateTime.of(2026, 11, 21, 13, 0)).single() as MatchChange.ResultIn
+        assertEquals(3, d.place?.previous, "before this result: lost 0-4, behind both others")
+    }
+
+    @Test
+    fun `the next match skips one rained off without a new date`() {
+        val rainedOff = match(2, mine, third, round = 2, start = LocalDateTime.of(2026, 11, 21, 10, 0), status = "No Celebrado", statusId = 6)
+        val later = match(3, fourth, mine, round = 3, start = LocalDateTime.of(2026, 11, 28, 10, 0))
+        val before = snapshot(listOf(match(1, mine, other), rainedOff, later))
+        val after = snapshot(listOf(played(1, mine, other, 2, 0), rainedOff, later))
+        val c = MatchChanges.between(before, after, setOf(mine.id), LocalDateTime.of(2026, 11, 14, 13, 0)).single() as MatchChange.ResultIn
+        assertEquals(3, c.next?.id)
+    }
+
+    @Test
     fun `no place for a team that has not played`() {
         assertNull(Standings.place(null, listOf(match(1, mine, other)), mine.id, futsal))
     }
@@ -110,6 +145,19 @@ class FamilyContextTest {
         assertTrue(Clashes.find(listOf("lucas" to a, "marta" to untimed)).isEmpty(), "no time yet")
         val otherDay = at(2, 10, 30, madrid).let { it.copy(start = it.start!!.plusDays(1)) }
         assertTrue(Clashes.find(listOf("lucas" to a, "marta" to otherDay)).isEmpty(), "another day")
+        assertTrue(Clashes.find(listOf("lucas" to a, "marta" to at(2, 10, 30, null))).isEmpty(), "field not set yet")
+    }
+
+    @Test
+    fun `the same school is one place whatever the court, and a name alone needs the same town`() {
+        val pista1 = Venue("PISTA 1 - EXTERIOR", "Calle del Colegio 3", town = "Madrid")
+        val pista2 = Venue("PISTA 2 - CUBIERTA", "CALLE DEL COLEGIO 3", town = "Madrid")
+        assertTrue(Clashes.samePlace(pista1, pista2), "two courts at one address, no coordinates")
+        val poliA = Venue("POLIDEPORTIVO", "", town = "Getafe")
+        val poliB = Venue("POLIDEPORTIVO", "", town = "Leganés")
+        assertTrue(!Clashes.samePlace(poliA, poliB), "a generic name in two towns")
+        assertTrue(!Clashes.samePlace(null, pista1))
+        assertTrue(Clashes.find(listOf("lucas" to at(1, 10, 0, pista1), "marta" to at(2, 10, 30, pista2))).isEmpty())
     }
 
     // --- the phone's health ---------------------------------------------------------------------
@@ -154,6 +202,14 @@ class FamilyContextTest {
         assertEquals(listOf(HealthIssue.LATE_BATTERY), BackgroundHealth.issues(neverRan.copy(sinceMs = now - 9 * hour), now))
         assertTrue(BackgroundHealth.issues(healthy.copy(lastBackgroundRunMs = now - 20 * hour, sinceMs = now - hour), now).isEmpty(), "the phone was off")
         assertTrue(BackgroundHealth.issues(neverRan.copy(sinceMs = 0), now).isEmpty(), "unknown")
+    }
+
+    @Test
+    fun `with every notice off in the app, the background is nobody's concern`() {
+        val quiet = healthy.copy(wantsNotifications = false, wantsChanges = false)
+        assertTrue(BackgroundHealth.issues(quiet.copy(backgroundRestricted = true), now).isEmpty())
+        assertTrue(BackgroundHealth.issues(quiet.copy(lastBackgroundRunMs = now - 20 * hour), now).isEmpty())
+        assertTrue(BackgroundHealth.issues(healthy.copy(lastBackgroundRunMs = now + hour), now).isEmpty(), "a clock that went back")
     }
 
     @Test

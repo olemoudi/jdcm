@@ -58,8 +58,16 @@ class Format(private val context: Context) {
         return listOf(v.name, place).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
-    /** The town, else the field's name: enough to tell two places apart in one line. */
-    fun placeShort(v: Venue?): String = v?.town?.takeIf { it.isNotBlank() } ?: v?.name?.takeIf { it.isNotBlank() } ?: context.getString(R.string.no_venue)
+    /**
+     * Where [v] is, in a few words that tell it apart from [other]: the town when the two towns differ,
+     * else the street (most fields are in Madrid: «Madrid · Madrid» said nothing — review 2026-11-19).
+     */
+    fun placeVs(v: Venue?, other: Venue?): String {
+        if (v == null) return context.getString(R.string.no_venue)
+        val town = v.town.trim()
+        if (town.isNotBlank() && !town.equals(other?.town?.trim().orEmpty(), ignoreCase = true)) return town
+        return v.address.trim().ifBlank { v.name.trim() }.ifBlank { town }.ifBlank { context.getString(R.string.no_venue) }
+    }
 
     /** «hace 5 min», «hace 2 h», «ayer 18:04». */
     fun age(ms: Long, nowMs: Long = System.currentTimeMillis()): String {

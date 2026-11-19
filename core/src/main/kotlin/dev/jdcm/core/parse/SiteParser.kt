@@ -241,54 +241,129 @@ object SiteParser {
     // --- the season (HTML) ----------------------------------------------------------------------
 
     /**
-     * Compiled on first use, apart from the parser: a pattern Android's ICU engine refuses (it is
-     * stricter than the JVM's the tests run on: a lone `}` is an error there) fails only the season
-     * read, which its caller survives, never every round page. Every brace is escaped.
+     * Compiled on first use, apart from the parser's own init. Android runs regexes on ICU, stricter than
+     * the JVM the tests use (a lone `}` is an error there): no braces in these. A pattern ICU refused
+     * would throw an Error from this object's init; SeasonWatch catches Throwable, the parser's other
+     * reads never touch it.
      */
     private object SeasonPatterns {
-        // Braces escaped inside the sets too: ICU reads `{…}` in a set as a string element.
-        val entry = Regex("""\{[^\{\}]*"Id"\s*:\s*\d+[^\{\}]*\}""")
         val id = Regex(""""Id"\s*:\s*(\d+)""")
         val name = Regex(""""Nombre"\s*:\s*"((?:[^"\\]|\\.)*)"""")
         val active = Regex(""""Activa"\s*:\s*true""")
-        val value = Regex(""""value"\s*:\s*(\d+)\s*\}\s*\)""")
-        val unicode = Regex("""\\u([0-9a-fA-F]{4})""")
+        val value = Regex(""""value"\s*:\s*(\d+)""")
+        val year = Regex("""\d\d\d\d""")
+        val unicode = Regex("""\\u([0-9a-fA-F]+)""")
+        val call = Regex("""cmbCalendarioTemporada["']\s*\)\s*\.\s*dxSelectBox\s*\(\s*""")
     }
 
     /**
      * The season the site's calendar page opens on, read from its season picker: the page writes the
      * seasons inline (`$("#cmbCalendarioTemporada").dxSelectBox({… "data":[{"Id":12,"Nombre":"TEMPORADA
-     * 2026-2027",…,"Activa":true,…}, …] …, "value":12})`, measured 2026-11-19). The picker's own
-     * value first (what a visitor sees), else the newest season marked active; null when the page
-     * has no such picker (a login wall, a redesign): the caller keeps what it had.
+     * 2026-2027",…,"Activa":true,…}, …] …, "value":12})`, measured 2026-11-19; its own script names the
+     * picker first, `….dxSelectBox("instance")`, which is not a call with options). Only the picker's
+     * options object is read, by brace depth: its own `value`, and the top-level entries of its `data`
+     * (nothing nested in an entry, nor another picker's list, can pass for a season). An entry needs a
+     * year in its name. The picker's value first (what a visitor sees), else the newest active season;
+     * null when there is no such picker (a login wall, a redesign): the caller keeps what it had.
      */
     fun activeSeason(html: String): Season? {
-        // The page's own script names the picker too (`….dxSelectBox("instance")`): every mention is
-        // tried, up to the end of its script, and the first one listing seasons is the picker.
-        var from = 0
-        while (true) {
-            val at = html.indexOf("cmbCalendarioTemporada", from).takeIf { it >= 0 } ?: return null
-            val end = html.indexOf("</script>", at).takeIf { it > at } ?: html.length
-            seasonIn(html.substring(at, end))?.let { return it }
-            from = at + 1
+        for (m in SeasonPatterns.call.findAll(html)) {
+            val open = m.range.last + 1
+            if (open >= html.length || html[open] != '{') continue
+            val options = balanced(html, open) ?: continue
+            seasonIn(options)?.let { return it }
         }
+        return null
     }
 
-    private fun seasonIn(call: String): Season? {
-        if (!call.contains(".dxSelectBox(")) return null
+    private fun seasonIn(options: String): Season? {
         val p = SeasonPatterns
-        val seasons = p.entry.findAll(call).mapNotNull { e ->
-            val id = p.id.find(e.value)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
-            val name = p.name.find(e.value)?.groupValues?.get(1)?.let(::unescape).orEmpty()
-            Triple(id, name, p.active.containsMatchIn(e.value))
-        }.filter { it.first > 0 }.toList()
+        val dataAt = options.indexOf("\"data\"").takeIf { it >= 0 } ?: return null
+        val arrayAt = options.indexOf('[', dataAt).takeIf { it >= 0 } ?: return null
+        val array = balanced(options, arrayAt) ?: return null
+        val seasons = topLevelObjects(array).mapNotNull { entry ->
+            val flat = flatten(entry)
+            val id = p.id.find(flat)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+            val name = p.name.find(flat)?.groupValues?.get(1)?.let(::unescape)?.trim().orEmpty()
+            if (id <= 0 || !p.year.containsMatchIn(name)) return@mapNotNull null
+            Triple(id, name, p.active.containsMatchIn(flat))
+        }
         if (seasons.isEmpty()) return null
-        val picked = p.value.find(call)?.groupValues?.get(1)?.toIntOrNull()?.let { v -> seasons.firstOrNull { it.first == v } }
+        val value = p.value.find(flatten(options))?.groupValues?.get(1)?.toIntOrNull()
+        val picked = value?.let { v -> seasons.firstOrNull { it.first == v } }
             ?: seasons.filter { it.third }.maxByOrNull { it.first }
             ?: return null
-        return Season(picked.first, picked.second.trim())
+        return Season(picked.first, picked.second)
+    }
+
+    /** The `{…}` or `[…]` starting at [start], strings and escapes respected; null when it never closes. */
+    private fun balanced(s: String, start: Int): String? {
+        var depth = 0
+        var inString = false
+        var quote = '"'
+        var i = start
+        while (i < s.length) {
+            val c = s[i]
+            if (inString) {
+                if (c == '\\') i++ else if (c == quote) inString = false
+            } else when (c) {
+                '"', '\'' -> { inString = true; quote = c }
+                '{', '[' -> depth++
+                '}', ']' -> { depth--; if (depth == 0) return s.substring(start, i + 1) }
+            }
+            i++
+        }
+        return null
+    }
+
+    /** The objects directly inside an array `[{…},{…}]`. */
+    private fun topLevelObjects(array: String): List<String> {
+        val out = mutableListOf<String>()
+        var i = 1
+        while (i < array.length - 1) {
+            val c = array[i]
+            if (c == '{') {
+                val obj = balanced(array, i) ?: break
+                out += obj
+                i += obj.length
+            } else if (c == '[' || c == '"' || c == '\'') {
+                i += (balanced(array, i)?.length ?: (skipString(array, i) - i)).coerceAtLeast(1)
+            } else i++
+        }
+        return out
+    }
+
+    private fun skipString(s: String, start: Int): Int {
+        val quote = s[start]
+        var i = start + 1
+        while (i < s.length && s[i] != quote) { if (s[i] == '\\') i++; i++ }
+        return i + 1
+    }
+
+    /** An object with whatever is nested in it blanked out: only its own keys and plain values remain. */
+    private fun flatten(obj: String): String {
+        val sb = StringBuilder()
+        var depth = 0
+        var inString = false
+        var quote = '"'
+        var i = 0
+        while (i < obj.length) {
+            val c = obj[i]
+            val keep = depth <= 1
+            if (inString) {
+                if (keep) sb.append(c)
+                if (c == '\\') { i++; if (keep && i < obj.length) sb.append(obj[i]) } else if (c == quote) inString = false
+            } else when (c) {
+                '"', '\'' -> { inString = true; quote = c; if (keep) sb.append(c) }
+                '{', '[' -> { depth++; if (depth <= 1) sb.append(c) }
+                '}', ']' -> { if (depth <= 1) sb.append(c); depth-- }
+                else -> if (keep) sb.append(c)
+            }
+            i++
+        }
+        return sb.toString()
     }
 
     private fun unescape(s: String): String =
-        SeasonPatterns.unicode.replace(s) { it.groupValues[1].toInt(16).toChar().toString() }.replace("\\\"", "\"").replace("\\/", "/")
+        SeasonPatterns.unicode.replace(s) { m -> m.groupValues[1].take(4).toIntOrNull(16)?.toChar()?.toString().orEmpty() + m.groupValues[1].drop(4) }.replace("\\\"", "\"").replace("\\/", "/")
 }

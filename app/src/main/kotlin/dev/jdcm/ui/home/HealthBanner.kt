@@ -78,7 +78,8 @@ fun readHealthFacts(c: AppContainer, hasKids: Boolean, nowMs: Long = System.curr
             ctx.getSystemService(UsageStatsManager::class.java).appStandbyBucket == UsageStatsManager.STANDBY_BUCKET_RESTRICTED
         }.getOrDefault(false))
     val changesOff = runCatching { nm.getNotificationChannel(Notifier.CH_CHANGES)?.importance == NotificationManager.IMPORTANCE_NONE }.getOrDefault(false)
-    val dataSaver = runCatching { cm.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED }.getOrDefault(false)
+    // Data saver lets Wi-Fi through: it is the cause only on a metered network.
+    val dataSaver = runCatching { cm.restrictBackgroundStatus == ConnectivityManager.RESTRICT_BACKGROUND_STATUS_ENABLED && cm.isActiveNetworkMetered }.getOrDefault(false)
     val online = runCatching {
         cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
     }.getOrDefault(false)
@@ -112,34 +113,42 @@ fun describeHealth(f: HealthFacts, nowMs: Long = System.currentTimeMillis()): St
 }
 
 /**
- * Home's warning when the phone stops the app's notices from arriving: notifications off, the
- * battery «Restricted», the changes channel muted, the hourly check held back for hours (by the
- * battery optimisation, data saver or the maker's power manager), or exact alarms taken away. The
- * most serious one only, with the one tap that fixes it; «Más tarde» hides that issue for three
- * days. Read again every time Home comes back, so it goes away as soon as it is fixed.
+ * The phone's state for Home's health banner, read off the main thread when Home is first shown and
+ * every time it comes back (the fix is in a system screen). Held by Home, outside its list: a lazy
+ * item forgets its state when scrolled away and would read again on every scroll back.
  */
 @Composable
-fun HealthBanner(c: AppContainer, hasKids: Boolean) {
-    val ctx = LocalContext.current
-    val fmt = remember(ctx) { Format(ctx) }
-    // Read in the first frame (quick binder calls, as the install banner's): a banner that grew a
-    // moment later sat above the list's first visible item, out of sight (seen on the AVD).
-    var facts by remember {
-        mutableStateOf(runCatching { readHealthFacts(c, hasKids) }.onFailure { DiagLog.w("UI", "health facts unreadable", it) }.getOrNull())
-    }
-    var snoozed by remember { mutableStateOf(c.settings.healthSnoozed) }
+fun rememberHealthFacts(c: AppContainer, hasKids: Boolean): HealthFacts? {
+    var facts by remember { mutableStateOf<HealthFacts?>(null) }
     var resumes by remember { mutableIntStateOf(0) }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
+        // Added to a resumed screen, the observer is sent ON_RESUME at once: that is the first read.
         val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_RESUME) resumes++ }
         owner.lifecycle.addObserver(obs)
         onDispose { owner.lifecycle.removeObserver(obs) }
     }
     LaunchedEffect(resumes, hasKids) {
+        if (resumes == 0) return@LaunchedEffect
         facts = withContext(Dispatchers.IO) {
             runCatching { readHealthFacts(c, hasKids) }.onFailure { DiagLog.w("UI", "health facts unreadable", it) }.getOrNull()
         }
     }
+    return facts
+}
+
+/**
+ * Home's warning when the phone stops the app's notices from arriving: notifications off, the
+ * battery «Restricted», the changes channel muted, the hourly check held back for hours (by the
+ * battery optimisation, data saver or the maker's power manager), or exact alarms taken away. The
+ * most serious one only, with the one tap that fixes it; «Más tarde» hides that issue for three
+ * days. [facts] come from [rememberHealthFacts], so it goes away as soon as it is fixed.
+ */
+@Composable
+fun HealthBanner(c: AppContainer, facts: HealthFacts?) {
+    val ctx = LocalContext.current
+    val fmt = remember(ctx) { Format(ctx) }
+    var snoozed by remember { mutableStateOf(c.settings.healthSnoozed) }
     val now = System.currentTimeMillis()
     val issue = facts?.let { f -> BackgroundHealth.issues(f, now).firstOrNull { (snoozed[it.name] ?: 0L) <= now } }
     LaunchedEffect(issue) {

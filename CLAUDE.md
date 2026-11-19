@@ -87,8 +87,10 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
 - **Season without a release** (0.2.8): the calendar page `Calendarios/CalendarioTemporada` writes its season
   picker inline (`$("#cmbCalendarioTemporada").dxSelectBox({… "data":[{"Id":12,"Nombre":"TEMPORADA 2026-2027",…,
   "Activa":true}…], "value":12})`; its own script names the picker first, `….dxSelectBox("instance")`).
-  `SeasonWatch` reads it (`SiteParser.activeSeason`) at most weekly, 08–22, from the worker and the app's start;
-  a failure retries in a day. `Settings.activeSeasonId` (never below the build's `EcmApi.SEASON_ID`) feeds the
+  `SeasonWatch` reads it (`SiteParser.activeSeason`: by brace depth, the picker's own options and the top-level
+  entries of its `data` only, a year in the name) at most weekly, 08–22, from the worker (not after a failed sync)
+  and the app's start; the attempt is stamped first, a failure retries in a day. A change needs two reads a day
+  apart and a plausible id (≥ the build's, within 5 of the held one); `Kid.seasonId` defaults to a fixed 12. `Settings.activeSeasonId` (never below the build's `EcmApi.SEASON_ID`) feeds the
   explorer and the team search; each `Kid` keeps the `seasonId` its team was picked in (12 for older ones).
   Home offers «Nueva temporada … Elegir equipo» (editor straight at the sport step) when the site is on a newer
   season and the child has nothing ahead.
@@ -97,14 +99,28 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   check held back > 8 h (counted from the latest of its last run, its scheduling, boot, the app's update and a
   tapped fix; only online; cause: data saver, battery optimisation or the maker's), exact alarms off (12/12L);
   one tap to the system screen that fixes it, «Más tarde» = 3 days per issue. Read in the first frame and on
-  every resume; both Home banners sit in one list item that is never 0 high (else a banner that appears later
-  grows above the first visible item, out of sight — seen on the AVD). Diagnostics → «Health banner».
-- **Result notice** (0.2.8): «Ahora 2º de 8 (sube 1)» first (`Standings.place`, before vs after this sync; no
-  move shown when the team had not played), then the score, then «Próximo: …». The match sheet shows «Cómo
+  every resume, off the main thread, held by Home (not its lazy item); both Home banners sit in one list item that
+  is never 0 high (else a banner that appears later grows above the first visible item, out of sight — seen on
+  the AVD). Data saver is the cause only on a metered network; nothing about the background when every notice is
+  off in the app. Known: a phone offline for hours that just reconnected may read «late» until its next check.
+  Diagnostics → «Health banner».
+- **Result notice** (0.2.8): «Ahora 2º de 8 (sube 1)» first (`Standings.place`: today's matches against the same
+  matches with this sync's new results taken back — never an older copy; no place while rounds are missing; a
+  tie says «(empatado)» and no move), then the score, then «Próximo: …» (the next match that is on). The match sheet shows «Cómo
   llegan» (place, points, last five) for a match to play, and «Enfrentamiento anterior» (`Schedule.previousMeeting`).
-- **Siblings' clashes** (0.2.8, `core/schedule/Clashes`): two children, different matches and fields (name +
-  address, or ~300 m), both timed and on, the later starting before the earlier's end (site's `Duracion`, else
-  75 min) + 30 min of travel. A card on Home for that date; a line in the eve reminder.
+- **Siblings' clashes** (0.2.8, `core/schedule/Clashes`): two children, different matches at different schools
+  (the same school = within ~300 m or the same address and town, whatever the court; a field not set yet never
+  clashes), both timed and on, the later starting before the earlier's end (site's `Duracion`, else 75 min) +
+  30 min of travel. A card on Home for that date (no names in its title; places told apart: town if they differ,
+  else street); a line in the eve reminder. On by default, off in
+  Settings («Avisar si dos hijos coinciden», `clashAlerts`; owner, 2026-11-19: opt-out).
+- **Share as an image** (0.2.9, `ui/share/ShareImage.kt`; owner, 2026-11-19: for the team's WhatsApp group): a
+  result (the match sheet's «Compartir»: image, or the old text), a round (group → Jornadas) and a table (group →
+  Clasificación, and the Clasificación tab), each under its card as a full-width row. The sheet's preview is
+  recorded with a GraphicsLayer: the PNG is exactly the preview, whole even when scrolled (verified on the AVD,
+  crests included). One PNG at a time in `cache/share`, sent through the FileProvider `${applicationId}.share`
+  (`res/xml/share_paths.xml`), kept an hour. The preview takes no taps (no ripple in the image) and reads as one
+  picture to TalkBack. Never a child's name in the image or the file name (group line, ids only).
 
 ## Reliability rules (reviews 2026-11-09 and 2026-11-16)
 

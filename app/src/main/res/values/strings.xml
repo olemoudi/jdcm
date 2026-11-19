@@ -232,7 +232,7 @@
     <string name="health_notif_title">JDCM\'s notifications are off</string>
     <string name="health_notif_text">You will not hear about time or field changes, results or reminders.</string>
     <string name="health_restricted_title">Android is not letting JDCM work</string>
-    <string name="health_restricted_text">Its battery use is set to «Restricted»: it cannot check for changes or notify you. Set it to «Optimised» or «Unrestricted».</string>
+    <string name="health_restricted_text">JDCM\'s battery use is set to «Restricted»: it cannot check for changes or notify you. Set it to «Optimised» or «Unrestricted».</string>
     <string name="health_channel_title">Change notifications are muted</string>
     <string name="health_channel_text">You will not hear when a match\'s time or field changes, or when it is called off.</string>
     <string name="health_late_title">Android is holding JDCM back</string>
@@ -240,7 +240,7 @@
     <string name="health_late_never">It has not managed a background check yet: notifications may come late.</string>
     <string name="health_late_battery">Let it use the battery without restrictions.</string>
     <string name="health_late_data">Data saver stops it using mobile data in the background.</string>
-    <string name="health_late_other">Your phone is stopping it: in JDCM\'s settings, look for battery or auto-start and let it run in the background.</string>
+    <string name="health_late_other">Your phone is holding JDCM back on its own: in the app\'s settings, look for battery or auto-start and let it run in the background.</string>
     <string name="health_exact_title">Pre-match checks may be late</string>
     <string name="health_exact_text">Without the «Alarms &amp; reminders» permission, the checks in the hours before each match may come late.</string>
     <string name="health_fix_turn_on">Turn on</string>
@@ -251,7 +251,7 @@
     <string name="notif_place_down">(down %1$d)</string>
     <string name="notif_result_next">Next: %1$s against %2$s</string>
     <string name="notif_clash">Same time as %1$s: %2$s in %3$s</string>
-    <string name="clash_title">%1$s and %2$s play at nearly the same time</string>
+    <string name="clash_title">Two matches at nearly the same time</string>
     <string name="clash_line">%1$s · %2$s · %3$s</string>
     <string name="clash_hint">In different places, with no time to get from one to the other.</string>
     <string name="season_new_title">New season %1$s</string>
@@ -260,4 +260,21 @@
     <string name="detail_form">Form</string>
     <string name="detail_meeting">Previous meeting</string>
     <string name="form_none">no matches yet</string>
+    <!-- 0.2.9: share as an image -->
+    <string name="share_image_title">Share as an image</string>
+    <string name="share_image">Share image</string>
+    <string name="share_text">Share text</string>
+    <string name="share_round">Share this round as an image</string>
+    <string name="share_table">Share the standings as an image</string>
+    <string name="share_table_sub">Standings on %1$s</string>
+    <string name="share_card_source">Data: juegosdeportivos.ecmadrid.org · JDCM</string>
+    <string name="share_failed">The image could not be made</string>
+    <string name="notify_clash">Warn when two children clash</string>
+    <string name="notify_clash_hint">When they play at nearly the same time in different places: a card in Matches and a line in the eve reminder.</string>
+    <string name="season_new_title_plain">New season</string>
+    <string name="share_preview_desc">Preview of the image</string>
+    <string name="form_desc">Last results: %1$s</string>
+    <string name="form_win">won</string>
+    <string name="form_draw">drew</string>
+    <string name="form_loss">lost</string>
 </resources>

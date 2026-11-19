@@ -34,7 +34,8 @@ object Schedule {
         val b = m.away?.id ?: return null
         return snapshot.matches
             .filter { it.id != m.id && it.hasResult && it.involves(a) && it.involves(b) }
-            .filter { x -> m.day?.let { d -> x.day?.isAfter(d) != true } ?: true }
+            // Earlier than this one: by day, or by round when this one has no date.
+            .filter { x -> m.day?.let { d -> x.day?.isAfter(d) != true } ?: (x.roundNumber < m.roundNumber) }
             .maxWithOrNull(MatchOrder)
     }
 

@@ -76,6 +76,10 @@ import dev.jdcm.ui.components.sportName
 import dev.jdcm.ui.format.Format
 import dev.jdcm.ui.nav.GroupRoute
 import dev.jdcm.ui.nav.TeamRoute
+import dev.jdcm.ui.share.RoundShareCard
+import dev.jdcm.ui.share.ShareImageSheet
+import dev.jdcm.ui.share.ShareRow
+import dev.jdcm.ui.share.TableShareCard
 import dev.jdcm.ui.theme.JdcmColors
 import dev.jdcm.ui.theme.Tabular
 import dev.jdcm.ui.theme.kidColor
@@ -147,6 +151,11 @@ fun GroupScreen(c: AppContainer, route: GroupRoute, onBack: () -> Unit, onTeam: 
                             val rows = remember(snap) { Standings.compute(snap.matches, rule) }
                             FlatCard {
                                 StandingsTable(rows, rule, route.teamId, accent, onTeam = { onTeam(TeamRoute(ref.groupId, ref.sportId, ref.competitionId, ref.categoryId, it)) })
+                            }
+                            var sharing by remember { mutableStateOf(false) }
+                            if (rows.any { it.played > 0 }) ShareRow(stringResource(R.string.share_table)) { sharing = true }
+                            if (sharing) {
+                                ShareImageSheet(id = "table-${snap.group.id}", onDismiss = { sharing = false }) { TableShareCard(snap, route.teamId, accent) }
                             }
                             FreshnessLine(status[route.groupId], snap.newestFetch)
                         }
@@ -242,6 +251,13 @@ private fun RoundsTab(snap: GroupSnapshot, ref: GroupRef, teamId: Int, accent: C
                             highlightLabel = kidName.ifBlank { null },
                             onDirections = actions.directions,
                         )
+                    }
+                }
+                var sharing by remember { mutableStateOf(false) }
+                ShareRow(stringResource(R.string.share_round)) { sharing = true }
+                if (sharing && round != null) {
+                    ShareImageSheet(id = "round-${snap.group.id}-${round.number}", onDismiss = { sharing = false }) {
+                        RoundShareCard(snap, round.id, teamId, accent)
                     }
                 }
             }

@@ -14,7 +14,7 @@ data class HealthFacts(
     /** Battery set to «Restricted» by the user, or Android's restricted standby bucket. */
     val backgroundRestricted: Boolean,
     val batteryUnrestricted: Boolean,
-    /** Data saver on and the app not exempt: no mobile data in the background. */
+    /** Data saver on, the app not exempt, and the phone on a metered network now (data saver lets Wi-Fi through). */
     val dataSaverBlocks: Boolean,
     /** The phone has a working network right now (a late check offline says nothing). */
     val online: Boolean,
@@ -59,9 +59,10 @@ object BackgroundHealth {
         if (!f.hasKids) return emptyList()
         val out = mutableListOf<HealthIssue>()
         if (f.wantsNotifications && !f.notificationsAllowed) out += HealthIssue.NOTIFICATIONS_OFF
-        if (f.backgroundRestricted) out += HealthIssue.BACKGROUND_RESTRICTED
+        // The background only matters to the family for its notices: with every one off in the app, nothing to say.
+        if (f.wantsNotifications && f.backgroundRestricted) out += HealthIssue.BACKGROUND_RESTRICTED
         if (f.notificationsAllowed && f.wantsChanges && f.changesChannelOff) out += HealthIssue.CHANGES_CHANNEL_OFF
-        if (!f.backgroundRestricted && f.online && isLate(f, nowMs)) {
+        if (f.wantsNotifications && !f.backgroundRestricted && f.online && isLate(f, nowMs)) {
             out += when {
                 f.dataSaverBlocks -> HealthIssue.LATE_DATA_SAVER
                 !f.batteryUnrestricted -> HealthIssue.LATE_BATTERY

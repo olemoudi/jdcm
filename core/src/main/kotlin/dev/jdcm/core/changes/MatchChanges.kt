@@ -47,6 +47,14 @@ object MatchChanges {
         val old = before.matches.associateBy { it.id }
         val out = mutableListOf<MatchChange>()
         val today = now.toLocalDate()
+        // The table before this sync's results: today's matches with the new results taken back (an
+        // older snapshot may lack rounds, and would invent a move). No place at all while rounds are missing.
+        val table by lazy {
+            if (after.missingRounds.isNotEmpty()) return@lazy null
+            val fresh = after.matches.filter { m -> m.hasResult && old[m.id]?.hasResult == false }.map { it.id }.toSet()
+            val prior = after.matches.map { m -> if (m.id in fresh) old.getValue(m.id) else m }
+            prior to PointsRule.forSport(after.sport)
+        }
         for (m in after.matches.distinctBy { it.id }) {
             val teamId = teamIds.firstOrNull { m.involves(it) } ?: continue
             if (m.isBye) continue
@@ -55,8 +63,10 @@ object MatchChanges {
                 // A "result" for a match not played yet is the site's data being odd (an early
                 // closed flag, a stray score), not news: never announce it.
                 if (m.day?.isAfter(today) != false) continue
-                val place = runCatching { Standings.place(before.matches, after.matches, teamId, PointsRule.forSport(after.sport)) }.getOrNull()
-                out += MatchChange.ResultIn(m, teamId, place, Schedule.next(after, teamId, now))
+                val place = table?.let { (prior, rule) -> runCatching { Standings.place(prior, after.matches, teamId, rule) }.getOrNull() }
+                // The next match the team turns up to: one rained off without a new date is not it.
+                val next = Schedule.upcoming(after, teamId, now).firstOrNull { !it.isCancelled }
+                out += MatchChange.ResultIn(m, teamId, place, next)
                 continue
             }
             if (m.hasResult) continue

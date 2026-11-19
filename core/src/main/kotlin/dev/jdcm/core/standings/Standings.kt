@@ -68,9 +68,15 @@ private class Tally {
  * Where a team stands after a result: its place among [teams], and the place it held before (null
  * when it had not played yet, or the table was not there): what a result notification adds.
  */
-data class TablePlace(val position: Int, val teams: Int, val previous: Int? = null) {
-    /** Places gained (positive) or lost (negative) since [previous]; 0 when unknown or the same. */
-    val moved: Int get() = previous?.let { it - position } ?: 0
+data class TablePlace(
+    val position: Int,
+    val teams: Int,
+    val previous: Int? = null,
+    /** Another team holds the same place (level on every criterion): «2º (empatado)», and no move is told. */
+    val tied: Boolean = false,
+) {
+    /** Places gained (positive) or lost (negative) since [previous]; 0 when unknown, the same, or tied. */
+    val moved: Int get() = if (tied) 0 else previous?.let { it - position } ?: 0
 }
 
 object Standings {
@@ -131,13 +137,15 @@ object Standings {
 
     /**
      * [teamId]'s place in [after], and its place in [before] if it had played by then. Null when the
-     * team has no row or has not played (a table of zeros says nothing).
+     * team has no row or has not played (a table of zeros says nothing). [before] should be [after]
+     * with the new results taken back, not an older copy (that may lack rounds, and invent a move).
      */
     fun place(before: List<Match>?, after: List<Match>, teamId: Int, rule: PointsRule): TablePlace? {
         val now = compute(after, rule)
         val row = now.firstOrNull { it.team.id == teamId }?.takeIf { it.played > 0 } ?: return null
         val prev = before?.let { b -> compute(b, rule).firstOrNull { it.team.id == teamId }?.takeIf { it.played > 0 }?.position }
-        return TablePlace(row.position, now.size, prev)
+        val tied = now.count { it.position == row.position } > 1
+        return TablePlace(row.position, now.size, prev, tied)
     }
 
     /**

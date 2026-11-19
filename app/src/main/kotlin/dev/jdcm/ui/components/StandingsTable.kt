@@ -141,7 +141,17 @@ fun StandingsTable(
 @Composable
 fun FormDots(form: List<Outcome>) {
     val extra = JdcmColors.extra
-    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+    val words = form.map {
+        stringResource(
+            when (it) {
+                Outcome.WIN -> R.string.form_win
+                Outcome.DRAW -> R.string.form_draw
+                Outcome.LOSS -> R.string.form_loss
+            },
+        )
+    }
+    val desc = stringResource(R.string.form_desc, words.joinToString(", "))
+    Row(Modifier.semantics { contentDescription = desc }, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
         form.forEach { o ->
             Box(
                 Modifier.size(8.dp).clip(CircleShape).background(

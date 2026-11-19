@@ -175,6 +175,11 @@ fun SettingsScreen(
                         // Switched on: a match in its last 24 hours with rain over 60 % is told now, not at the next run.
                         if (v) c.scope.launch { dev.jdcm.notify.RainWatch.check(ctx.applicationContext as dev.jdcm.JdcmApp, "switched on") }
                     }
+                    Hairline()
+                    SwitchRow(stringResource(R.string.notify_clash), stringResource(R.string.notify_clash_hint), s.clashAlerts) { v ->
+                        changed { it.copy(clashAlerts = v) }
+                        DiagLog.i("UI", "clash alerts ${if (v) "on" else "off"}")
+                    }
                 }
             }
 

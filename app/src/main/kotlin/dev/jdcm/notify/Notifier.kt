@@ -123,7 +123,7 @@ class Notifier(private val context: Context, private val settings: Settings) {
         var text = context.getString(R.string.notif_reminder_text, time, opponent, fmt.venueLine(m.venue))
         if (clash != null) {
             val (other, om) = clash
-            text += "\n" + context.getString(R.string.notif_clash, other.name, fmt.time(om), fmt.placeShort(om.venue))
+            text += "\n" + context.getString(R.string.notif_clash, other.name, fmt.time(om), fmt.placeVs(om.venue, m.venue))
         }
         post(CH_REMINDERS, notificationId(m.id, 3), context.getString(R.string.notif_reminder_title, kid.name), text, kid, m, if (clash != null) "Reminder+clash" else "Reminder")
     }

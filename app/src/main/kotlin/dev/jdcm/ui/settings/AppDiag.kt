@@ -34,7 +34,7 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
     val settings = DiagSection(
         "Settings",
         listOf(
-            "theme=${s.theme} changes=${s.notifyChanges} results=${s.notifyResults} reminder=${s.notifyReminder}@${s.reminderHour}h showClosed=${s.showClosed}",
+            "theme=${s.theme} changes=${s.notifyChanges} results=${s.notifyResults} reminder=${s.notifyReminder}@${s.reminderHour}h showClosed=${s.showClosed} rain=${s.rainAlerts} clashes=${s.clashAlerts}",
             "notifications allowed=${c.notifier.canPost()} lastBackgroundSync=${at(c.settings.lastBackgroundSyncMs)} matchWindow=${RefreshPolicy.isMatchWindow(now)}",
             "seenVersionCode=${c.settings.seenVersionCode} reminded=${c.settings.remindedMatchIds.size} onboardingDone=${c.settings.onboardingDone}",
             "installPermission=${dev.jdcm.ui.onboarding.Perms.canInstall(c.app)}" +

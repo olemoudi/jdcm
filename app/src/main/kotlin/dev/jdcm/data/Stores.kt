@@ -143,8 +143,11 @@ data class Kid(
     val teamId: Int,
     val teamName: String,
     val crestPath: String = "",
-    /** The season the team was picked in (children added before 0.2.8: the build's, 2026-27). */
-    val seasonId: Int = EcmApi.SEASON_ID,
+    /**
+     * The season the team was picked in. Children saved before 0.2.8 have none on disk: they are from
+     * 2026-27 (#12) — a fixed number, never EcmApi.SEASON_ID, which a later build raises.
+     */
+    val seasonId: Int = 12,
 ) {
     val ref: GroupRef get() = GroupRef(groupId, sportId, competitionId, categoryId)
 }

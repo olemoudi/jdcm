@@ -150,6 +150,21 @@ class SiteParserTest {
     }
 
     @Test
+    fun `nothing nested in an entry, nor another picker's list, passes for a season`() {
+        val nested = """<script>$("#cmbCalendarioTemporada").dxSelectBox({"dataSource":{"store":new DevExpress.data.ArrayStore({"data":[""" +
+            """{"Id":12,"Nombre":"TEMPORADA 2026-2027","Activa":true,"Competiciones":[{"Id":118,"Nombre":"SÉNIOR 2026","Activa":true}]}""" +
+            """]})},"value":12});</script>"""
+        assertEquals(12, SiteParser.activeSeason(nested)?.id)
+        val noValue = nested.replace(",\"value\":12", "")
+        assertEquals(12, SiteParser.activeSeason(noValue)?.id, "the competition inside is not an entry")
+        val otherPicker = """<script>let i = $("#cmbCalendarioTemporada").dxSelectBox("instance");""" +
+            """$("#cmbDeporte").dxSelectBox({"dataSource":{"store":new DevExpress.data.ArrayStore({"data":[{"Id":2,"Nombre":"FUTBOL SALA","Activa":true}]})},"value":2});</script>"""
+        assertNull(SiteParser.activeSeason(otherPicker))
+        val escaped = nested.replace("TEMPORADA 2026-2027", "TEMPORADA 2026\\/2027 \\u00DAltima")
+        assertEquals("TEMPORADA 2026/2027 Última", SiteParser.activeSeason(escaped)?.name)
+    }
+
+    @Test
     fun `a page without the season picker gives no season`() {
         assertNull(SiteParser.activeSeason("<html><body>Iniciar sesión</body></html>"))
         assertNull(SiteParser.activeSeason(fixture("jornada_grupo.json")))

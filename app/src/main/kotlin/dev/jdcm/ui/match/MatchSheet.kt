@@ -40,7 +40,9 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -68,6 +70,8 @@ import dev.jdcm.ui.components.Crest
 import dev.jdcm.ui.components.FormDots
 import dev.jdcm.ui.components.Hairline
 import dev.jdcm.ui.format.Format
+import dev.jdcm.ui.share.ResultShareCard
+import dev.jdcm.ui.share.ShareImageSheet
 import dev.jdcm.ui.theme.JdcmColors
 import dev.jdcm.ui.theme.Tabular
 import java.time.Duration
@@ -81,6 +85,8 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
     val actions = LocalActions.current
     val m = args.match
     val extra = JdcmColors.extra
+    var sharing by remember { mutableStateOf(false) }
+    val snapsForShare by dev.jdcm.ui.LocalContainer.current.repository.snapshots.collectAsState()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).navigationBarsPadding().padding(bottom = 16.dp)) {
             Text(
@@ -123,7 +129,7 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
                 if (playable && m.day != null) {
                     ActionButton(Icons.Outlined.EditCalendar, stringResource(R.string.action_calendar), Modifier.weight(1f)) { addToCalendar(ctx, m, fmt, args.title) }
                 }
-                ActionButton(Icons.Outlined.Share, stringResource(R.string.action_share), Modifier.weight(1f)) { share(ctx, m, fmt) }
+                ActionButton(Icons.Outlined.Share, stringResource(R.string.action_share), Modifier.weight(1f)) { sharing = true }
             }
             Spacer(Modifier.height(12.dp))
             Hairline()
@@ -189,6 +195,12 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
                     }
                 }
             }
+        }
+    }
+    // After the match sheet, so it opens above it.
+    if (sharing) {
+        ShareImageSheet(id = "result-${m.id}", onDismiss = { sharing = false }, onShareText = { share(ctx, m, fmt) }) {
+            ResultShareCard(m, args.ref?.let { snapsForShare[it.groupId] }, args.highlightTeamId, args.accent)
         }
     }
 }

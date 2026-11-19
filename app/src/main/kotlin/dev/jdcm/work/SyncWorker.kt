@@ -47,8 +47,9 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
         c.settings.lastBackgroundSyncMs = System.currentTimeMillis()
         // The rain forecast for the children's next matches, and its alerts (RainWatch).
         runCatching { RainWatch.check(app, "worker", throttled = true) }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
-        // Which season the site is on (weekly at most, in the daytime).
-        SeasonWatch.check(c, "worker")
+        // Which season the site is on (weekly at most, in the daytime); not right after the site failed us.
+        if (outcomes.isNotEmpty() && outcomes.all { it == dev.jdcm.data.SyncOutcome.FAILED }) DiagLog.i(TAG, "season check skipped: this run's syncs failed")
+        else SeasonWatch.check(c, "worker")
         // The repository re-arms the reminder after any sync that brought data (from here or a screen).
         DiagLog.i(TAG, "end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()

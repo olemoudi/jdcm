@@ -49,6 +49,9 @@ import dev.jdcm.ui.components.SectionHeader
 import dev.jdcm.ui.components.StandingsTable
 import dev.jdcm.ui.components.sportIcon
 import dev.jdcm.ui.nav.TeamRoute
+import dev.jdcm.ui.share.ShareImageSheet
+import dev.jdcm.ui.share.ShareRow
+import dev.jdcm.ui.share.TableShareCard
 import dev.jdcm.ui.theme.kidColor
 
 /** The second thing the friend asked for: each child's table, one tap from anywhere. */
@@ -110,6 +113,15 @@ fun TablesScreen(c: AppContainer, onSettings: () -> Unit, onAddKid: () -> Unit, 
                                 StandingsTable(rows, rule, kid.teamId, kidColor(kid.color), onTeam = { teamId ->
                                     onTeam(TeamRoute(kid.groupId, kid.sportId, kid.competitionId, kid.categoryId, teamId))
                                 })
+                            }
+                        }
+                        if (snap != null && rows.any { it.played > 0 }) {
+                            var sharing by remember { mutableStateOf(false) }
+                            ShareRow(stringResource(R.string.share_table)) { sharing = true }
+                            if (sharing) {
+                                ShareImageSheet(id = "table-${snap.group.id}", onDismiss = { sharing = false }) {
+                                    TableShareCard(snap, kid.teamId, kidColor(kid.color))
+                                }
                             }
                         }
                         FreshnessLine(status[kid.groupId], snap?.newestFetch ?: 0)

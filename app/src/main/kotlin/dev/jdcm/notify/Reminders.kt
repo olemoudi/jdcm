@@ -141,7 +141,7 @@ object Reminders {
             if (due.isEmpty()) DiagLog.i(TAG, "fired: nothing due now")
             val snaps = c.repository.snapshots.value
             for ((kid, m) in due) {
-                val clash = clashFor(kid, m, kids, snaps)
+                val clash = if (s.clashAlerts) clashFor(kid, m, kids, snaps) else null
                 if (clash != null) DiagLog.i(TAG, "match #${m.id} clashes with #${clash.second.id} (#${clash.first.id.take(8)})")
                 c.notifier.reminder(kid, m, clash)
                 reminded += key(kid, m)
@@ -167,7 +167,7 @@ class ReminderReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 Reminders.fire(app)
-            } catch (e: Exception) {
+            } catch (e: Throwable) { // Errors too: a receiver that throws takes the process down
                 DiagLog.e("Reminder", "fire failed", e)
             } finally {
                 done.finish()

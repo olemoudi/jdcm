@@ -139,11 +139,16 @@ fun HomeScreen(
     val focus = remember(days, today) { Schedule.focusDate(days, today) }
     val day = pickedDay?.let(LocalDate::ofEpochDay)?.takeIf { it in days } ?: focus
     // Two children at nearly the same time in different places, that date (any child: the filter only hides cards).
-    val clashes = remember(kids, snaps, day) {
-        day?.let { d -> Clashes.find(kids.flatMap { k -> snaps[k.groupId]?.teamMatches(k.teamId).orEmpty().filter { it.day == d }.map { k.id to it } }) }.orEmpty()
+    // Off in Settings → «Avisar si dos hijos coinciden» (on by default).
+    val settings by c.settings.state.collectAsState()
+    val clashes = remember(kids, snaps, day, settings.clashAlerts) {
+        if (!settings.clashAlerts) emptyList()
+        else day?.let { d -> Clashes.find(kids.flatMap { k -> snaps[k.groupId]?.teamMatches(k.teamId).orEmpty().filter { it.day == d }.map { k.id to it } }) }.orEmpty()
     }
     // The season the site is on (SeasonWatch), for the children whose own one is over.
     val season = Season(c.settings.activeSeasonId, c.settings.activeSeasonName)
+    // What the phone does to the notices: read here, not in the list item (that is rebuilt on every scroll back).
+    val health = rememberHealthFacts(c, hasKids = kids.isNotEmpty())
 
     Scaffold(
         topBar = {
@@ -188,7 +193,7 @@ fun HomeScreen(
                     // above the first visible item, out of sight (seen on the AVD).
                     item(key = "banners") {
                         Column(Modifier.fillMaxWidth().heightIn(min = 1.dp)) {
-                            HealthBanner(c, hasKids = true)
+                            HealthBanner(c, health)
                             InstallPermissionBanner(c)
                         }
                     }
@@ -387,12 +392,13 @@ private fun ClashCard(clash: Clash, kids: List<Kid>) {
         Icon(Icons.Outlined.WarningAmber, null, tint = extra.modified)
         Spacer(Modifier.width(12.dp))
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(stringResource(R.string.clash_title, a.name, b.name), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            listOf(a to clash.first.second, b to clash.second.second).forEach { (k, m) ->
+            // No names in the title: «Lucía y Irene» wants «e» (the lines name both).
+            Text(stringResource(R.string.clash_title), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            listOf(Triple(a, clash.first.second, clash.second.second), Triple(b, clash.second.second, clash.first.second)).forEach { (k, m, other) ->
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(8.dp).clip(CircleShape).background(kidColor(k.color)))
                     Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.clash_line, fmt.time(m), k.name, fmt.placeShort(m.venue)), style = MaterialTheme.typography.bodyMedium)
+                    Text(stringResource(R.string.clash_line, fmt.time(m), k.name, fmt.placeVs(m.venue, other.venue)), style = MaterialTheme.typography.bodyMedium)
                 }
             }
             Text(stringResource(R.string.clash_hint), style = MaterialTheme.typography.bodySmall, color = extra.muted)
@@ -413,7 +419,10 @@ private fun NewSeasonRow(kid: Kid, season: Season, onPick: () -> Unit) {
             Icon(Icons.Outlined.Autorenew, null, tint = extra.link)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(stringResource(R.string.season_new_title, season.years), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    if (season.name.isBlank()) stringResource(R.string.season_new_title_plain) else stringResource(R.string.season_new_title, season.years),
+                    style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold,
+                )
                 Text(stringResource(R.string.season_new_text, kid.name), style = MaterialTheme.typography.bodyMedium)
             }
         }
