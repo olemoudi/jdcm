@@ -1,13 +1,13 @@
 {
-  "versionCode": 12,
-  "versionName": "0.2.7-alpha",
-  "tag": "v0.2.7-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.7-alpha/jdcm.apk",
-  "assetId": 764156136,
-  "size": 4546677,
-  "sha256": "354de7044846fd55595f2126a2db0bc920d2f0123c04552bfc94322a466ab97b",
+  "versionCode": 14,
+  "versionName": "0.2.8-alpha",
+  "tag": "v0.2.8-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.8-alpha/jdcm.apk",
+  "assetId": 768680301,
+  "size": 4584889,
+  "sha256": "f1feb9d2a4d76f552f95d2e17668ebd1717f995a2c413cef8e9d44bc7940b04f",
   "notes": {
-    "es": "• Un partido suspendido por lluvia en domingo ya no se toma por una recuperación.\n• El aviso de lluvia de la víspera ya no se pierde, y el de suspensión suena siempre.\n• Si un niño juega dos partidos el mismo día, Inicio muestra los dos.",
-    "en": "• A match rained off on a Sunday is no longer taken for a replay.\n• The eve's rain alert is no longer lost, and a rain-off notice always sounds.\n• If a child plays twice on the same day, Home shows both matches."
+    "es": "• Inicio avisa si el móvil impide que lleguen los avisos (permisos, batería, ahorro de datos), con el botón que lo arregla.\n• Resultados con la posición en la tabla y el próximo partido; la ficha muestra cómo llegan los dos equipos y la ida.\n• Avisa si dos hermanos juegan casi a la vez en sitios distintos. La próxima temporada llegará sin actualizar la app.",
+    "en": "• Home warns when the phone stops notices from arriving (permissions, battery, data saver), with the button that fixes it.\n• Results carry the table position and the next match; a match shows both teams' form and the first leg.\n• Warns when two siblings play at nearly the same time in different places. Next season comes without an app update."
   }
 }
