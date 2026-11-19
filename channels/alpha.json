@@ -1,13 +1,13 @@
 {
-  "versionCode": 15,
-  "versionName": "0.2.9-alpha",
-  "tag": "v0.2.9-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.9-alpha/jdcm.apk",
-  "assetId": 769127223,
-  "size": 4620477,
-  "sha256": "e948b1537d2bd535d724d0dea4d630e8d267fdf0060177be4a30a4d4362545c5",
+  "versionCode": 17,
+  "versionName": "0.2.10-alpha",
+  "tag": "v0.2.10-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.10-alpha/jdcm.apk",
+  "assetId": 769303702,
+  "size": 4640681,
+  "sha256": "19894e41fd35bb41c075fbdf739e1676a86e2a2fd32bb80f0ab4f7e105c8e5c8",
   "notes": {
-    "es": "• Comparte como imagen un resultado, una jornada o la clasificación, lista para el grupo de WhatsApp del equipo.\n• El aviso de dos hijos que juegan casi a la vez se puede apagar en Ajustes y distingue mejor dónde juega cada uno.\n• Revisión de fiabilidad: la temporada, la posición tras un resultado y los avisos del estado del móvil, más precisos.",
-    "en": "• Share a result, a round or the standings as an image, ready for the team's WhatsApp group.\n• The warning about two children playing at once can be turned off in Settings, and tells their places apart better.\n• Reliability review: the season, the table position after a result and the phone-health warnings are more accurate."
+    "es": "• En Xiaomi, Huawei, Honor, OPPO, realme, OnePlus y vivo, JDCM te lleva al ajuste del fabricante que deja llegar sus avisos.\n• En los Xiaomi, Inicio avisa si el «Inicio automático» de JDCM está desactivado.\n• En Samsung, un consejo para que JDCM no entre «en suspensión» y pierda avisos.",
+    "en": "• On Xiaomi, Huawei, Honor, OPPO, realme, OnePlus and vivo, JDCM takes you to the maker's setting that lets its notices through.\n• On Xiaomi phones, Home warns when JDCM's «Autostart» is off.\n• On Samsung phones, a tip so that JDCM is never put «to sleep» and misses notices."
   }
 }
