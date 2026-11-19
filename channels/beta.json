@@ -1,13 +1,13 @@
 {
-  "versionCode": 13,
-  "versionName": "0.2.7-beta",
-  "tag": "v0.2.7-beta",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.7-beta/jdcm.apk",
-  "assetId": 764179759,
-  "size": 4546769,
-  "sha256": "fceb6d39b712fb967a9c13bc74269ffc37905eac820e15f21e97a0ad42c93aac",
+  "versionCode": 16,
+  "versionName": "0.2.9-beta",
+  "tag": "v0.2.9-beta",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.9-beta/jdcm.apk",
+  "assetId": 769154839,
+  "size": 4620569,
+  "sha256": "602755ae7ae5b59dcfa54824ee2d0dc7da3f624bc7063750ea37666b5f47f690",
   "notes": {
-    "es": "• Nuevo: probabilidad de lluvia (AEMET) en cada partido y aviso si es alta.\n• La tira de fechas muestra todos los días con partido, recuperaciones incluidas.",
-    "en": "• New: chance of rain (AEMET) for each match, and an alert when it is high.\n• The date strip shows every match day, replays included."
+    "es": "• Nuevo: comparte resultados y clasificaciones como imagen, y aviso si dos hijos juegan a la vez en sitios distintos.\n• Los resultados dicen la posición en la tabla, e Inicio avisa si el móvil no deja llegar los avisos.",
+    "en": "• New: share results and standings as an image, and a warning when two children play at once in different places.\n• Results tell the table position, and Home warns when the phone keeps notifications from arriving."
   }
 }
