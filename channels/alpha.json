@@ -1,13 +1,13 @@
 {
-  "versionCode": 14,
-  "versionName": "0.2.8-alpha",
-  "tag": "v0.2.8-alpha",
-  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.8-alpha/jdcm.apk",
-  "assetId": 768680301,
-  "size": 4584889,
-  "sha256": "f1feb9d2a4d76f552f95d2e17668ebd1717f995a2c413cef8e9d44bc7940b04f",
+  "versionCode": 15,
+  "versionName": "0.2.9-alpha",
+  "tag": "v0.2.9-alpha",
+  "apk": "https://github.com/olemoudi/jdcm/releases/download/v0.2.9-alpha/jdcm.apk",
+  "assetId": 769127223,
+  "size": 4620477,
+  "sha256": "e948b1537d2bd535d724d0dea4d630e8d267fdf0060177be4a30a4d4362545c5",
   "notes": {
-    "es": "• Inicio avisa si el móvil impide que lleguen los avisos (permisos, batería, ahorro de datos), con el botón que lo arregla.\n• Resultados con la posición en la tabla y el próximo partido; la ficha muestra cómo llegan los dos equipos y la ida.\n• Avisa si dos hermanos juegan casi a la vez en sitios distintos. La próxima temporada llegará sin actualizar la app.",
-    "en": "• Home warns when the phone stops notices from arriving (permissions, battery, data saver), with the button that fixes it.\n• Results carry the table position and the next match; a match shows both teams' form and the first leg.\n• Warns when two siblings play at nearly the same time in different places. Next season comes without an app update."
+    "es": "• Comparte como imagen un resultado, una jornada o la clasificación, lista para el grupo de WhatsApp del equipo.\n• El aviso de dos hijos que juegan casi a la vez se puede apagar en Ajustes y distingue mejor dónde juega cada uno.\n• Revisión de fiabilidad: la temporada, la posición tras un resultado y los avisos del estado del móvil, más precisos.",
+    "en": "• Share a result, a round or the standings as an image, ready for the team's WhatsApp group.\n• The warning about two children playing at once can be turned off in Settings, and tells their places apart better.\n• Reliability review: the season, the table position after a result and the phone-health warnings are more accurate."
   }
 }
