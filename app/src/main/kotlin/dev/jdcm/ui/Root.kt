@@ -160,6 +160,8 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                 LaunchedEffect(Unit) { c.kids.load() }
                 OnboardingScreen(c, hasKids = !kids.isNullOrEmpty()) { addKid ->
                     c.settings.onboardingDone = true
+                    // The guide's battery page showed the maker's own step: Home need not repeat it.
+                    c.settings.oemTipDone = true
                     // The guide is this version's news: no «Novedades» sheet right after it.
                     c.settings.seenVersionCode = BuildConfig.VERSION_CODE
                     onboarding = false

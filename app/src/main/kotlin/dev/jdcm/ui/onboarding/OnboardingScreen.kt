@@ -127,7 +127,10 @@ fun OnboardingScreen(c: AppContainer, hasKids: Boolean, onFinish: (addKid: Boole
                         primary = if (battery) stringResource(R.string.next) to { go(Step.DONE) }
                         else stringResource(R.string.ob_battery_allow) to { Perms.askBatteryUnrestricted(ctx) },
                         secondary = if (battery) null else stringResource(R.string.ob_not_now) to { go(Step.DONE) },
-                    ) { PauseIfUnusedItem() }
+                    ) {
+                        PauseIfUnusedItem()
+                        OemItem()
+                    }
                     Step.DONE -> Page(
                         icon = Icons.Filled.CheckCircle,
                         title = stringResource(R.string.ob_done_title),
@@ -313,6 +316,63 @@ private fun PauseIfUnusedItem() {
             Text(stringResource(R.string.ob_unused_done), style = MaterialTheme.typography.titleMedium, color = JdcmColors.extra.win)
         }
     }
+}
+
+/**
+ * The maker's own step, on the phones whose power manager stops sideloaded apps beyond Android's battery
+ * switch (oem/OemPages): what to turn on, in its own words, and a button to the page. On a Xiaomi whose
+ * «Inicio automático» reads as on, it says so instead. Nothing on a Pixel, a Motorola…
+ */
+@Composable
+private fun OemItem() {
+    val ctx = LocalContext.current
+    val oem = dev.jdcm.oem.OemPower.oem
+    val text = oemText(oem) ?: return
+    val hasPage = remember { dev.jdcm.oem.OemPower.hasPage(ctx) }
+    val autostart by rememberOnResume { c -> dev.jdcm.oem.OemPower.xiaomiAutostart(c) == true }
+    LaunchedEffect(Unit) { DiagLog.i("UI", "onboarding oem=$oem page=$hasPage autostartMode=${dev.jdcm.oem.OemPower.xiaomiAutostartMode(ctx)}") }
+    Column(
+        Modifier.fillMaxWidth().padding(top = 16.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .padding(16.dp),
+    ) {
+        Text(stringResource(R.string.ob_oem_title, oem.brand), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(6.dp))
+        Text(text, style = MaterialTheme.typography.bodyMedium)
+        if (oem == dev.jdcm.oem.Oem.XIAOMI) {
+            if (autostart) {
+                Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.CheckCircle, null, tint = JdcmColors.extra.win)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.oem_autostart_on), style = MaterialTheme.typography.titleSmall, color = JdcmColors.extra.win)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = { dev.jdcm.oem.OemPower.open(ctx, "onboarding", dev.jdcm.oem.OemPageKind.AUTOSTART) },
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(min = 48.dp),
+                ) { Text(stringResource(R.string.oem_open_autostart)) }
+            }
+            OutlinedButton(
+                onClick = { dev.jdcm.oem.OemPower.open(ctx, "onboarding", dev.jdcm.oem.OemPageKind.BATTERY) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp).heightIn(min = 48.dp),
+            ) { Text(stringResource(R.string.oem_open_battery)) }
+        } else {
+            OutlinedButton(
+                onClick = { dev.jdcm.oem.OemPower.open(ctx, "onboarding", dev.jdcm.oem.OemPageKind.AUTOSTART, dev.jdcm.oem.OemPageKind.BATTERY) },
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp).heightIn(min = 48.dp),
+            ) { Text(if (hasPage) stringResource(R.string.oem_open, oem.brand) else stringResource(R.string.oem_open_app_info)) }
+        }
+    }
+}
+
+/** What to turn on, in the maker's own words; null for a phone that needs nothing beyond Android's switch. */
+@Composable
+fun oemText(oem: dev.jdcm.oem.Oem): String? = when (oem) {
+    dev.jdcm.oem.Oem.XIAOMI -> stringResource(R.string.oem_xiaomi_text)
+    dev.jdcm.oem.Oem.SAMSUNG -> stringResource(R.string.oem_samsung_text)
+    dev.jdcm.oem.Oem.HUAWEI, dev.jdcm.oem.Oem.HONOR -> stringResource(R.string.oem_huawei_text)
+    dev.jdcm.oem.Oem.OPPO, dev.jdcm.oem.Oem.REALME, dev.jdcm.oem.Oem.ONEPLUS -> stringResource(R.string.oem_oppo_text)
+    dev.jdcm.oem.Oem.VIVO -> stringResource(R.string.oem_vivo_text)
+    dev.jdcm.oem.Oem.OTHER -> null
 }
 
 @Composable

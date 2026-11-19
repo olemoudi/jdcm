@@ -146,6 +146,11 @@ class Settings(context: Context) {
         get() = d.getLong("healthLateFixAt", 0)
         set(v) = d.edit { putLong("healthLateFixAt", v) }
 
+    /** The maker's own step was seen in the guide or ended with «Ya está» on Home (device-only: another phone, another maker). */
+    var oemTipDone: Boolean
+        get() = d.getBoolean("oemTipDone", false)
+        set(v) = d.edit { putBoolean("oemTipDone", v) }
+
     /** Home's health banner: each issue's «Más tarde», as issue name → hidden until (epoch ms). */
     var healthSnoozed: Map<String, Long>
         get() = d.getStringSet("healthSnoozed", emptySet()).orEmpty().mapNotNull { e ->

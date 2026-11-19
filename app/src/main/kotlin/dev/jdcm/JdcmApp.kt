@@ -73,6 +73,12 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
         DiagLog.i("App", "process start ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) ${BuildConfig.GIT_SHA} api ${Build.VERSION.SDK_INT}")
         container = AppContainer(this)
         container.notifier.ensureChannels()
+        if (BuildConfig.DEBUG) {
+            dev.jdcm.oem.OemPower.debugOverride = getSharedPreferences("device", MODE_PRIVATE).getString("debugOem", null)
+                ?.let { runCatching { dev.jdcm.oem.Oem.valueOf(it) }.getOrNull() }
+                ?.also { DiagLog.w("App", "debug: pretending to be a $it") }
+        }
+        DiagLog.i("App", "maker ${dev.jdcm.oem.OemPower.oem}")
 
         // Beta for every fresh install, whatever APK it came from; nobody has to touch it. Settings →
         // Updates switches to alpha. Read before scheduledForVersion is written below: non-zero means

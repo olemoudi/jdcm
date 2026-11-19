@@ -23,6 +23,13 @@ data class HealthFacts(
     /** Change notices are on (the pre-match checks depend on them). */
     val wantsChanges: Boolean,
     val hasKids: Boolean,
+    /** The maker's «Inicio automático» is read as off (Xiaomi only can say): nothing runs after a reboot or a swipe. */
+    val autostartOff: Boolean = false,
+    /**
+     * A maker whose power manager stops sideloaded apps and whose switch cannot be read (Huawei, OPPO,
+     * vivo…, a Xiaomi that cannot say, a Samsung still optimised), and the family has not said it is done.
+     */
+    val oemTip: Boolean = false,
     /** When the hourly background check last ran (0 = never seen). */
     val lastBackgroundRunMs: Long,
     /** Since when it could have run: the latest of its scheduling, the phone's boot and the app's update. */
@@ -34,6 +41,8 @@ enum class HealthIssue {
     NOTIFICATIONS_OFF,
     /** Nothing runs in the background. */
     BACKGROUND_RESTRICTED,
+    /** The maker's «Inicio automático» is off (Xiaomi): after a reboot or a swipe from recents, nothing runs. */
+    AUTOSTART_OFF,
     /** No notice of time, place or status changes. */
     CHANGES_CHANNEL_OFF,
     /** Android is holding the hourly check back: notices come late. Fixed by turning the battery optimisation off. */
@@ -44,6 +53,8 @@ enum class HealthIssue {
     LATE_OTHER,
     /** Android 12/12L: the pre-match checks may come late. */
     EXACT_ALARMS_OFF,
+    /** Once: the maker's own step (oem/OemPages), on a phone where it cannot be read. «Ya está» ends it. */
+    OEM_TIP,
 }
 
 object BackgroundHealth {
@@ -61,6 +72,7 @@ object BackgroundHealth {
         if (f.wantsNotifications && !f.notificationsAllowed) out += HealthIssue.NOTIFICATIONS_OFF
         // The background only matters to the family for its notices: with every one off in the app, nothing to say.
         if (f.wantsNotifications && f.backgroundRestricted) out += HealthIssue.BACKGROUND_RESTRICTED
+        if (f.wantsNotifications && f.autostartOff) out += HealthIssue.AUTOSTART_OFF
         if (f.notificationsAllowed && f.wantsChanges && f.changesChannelOff) out += HealthIssue.CHANGES_CHANNEL_OFF
         if (f.wantsNotifications && !f.backgroundRestricted && f.online && isLate(f, nowMs)) {
             out += when {
@@ -70,6 +82,7 @@ object BackgroundHealth {
             }
         }
         if (f.notificationsAllowed && f.wantsChanges && !f.exactAlarmsAllowed) out += HealthIssue.EXACT_ALARMS_OFF
+        if (f.wantsNotifications && f.oemTip && HealthIssue.AUTOSTART_OFF !in out) out += HealthIssue.OEM_TIP
         return out
     }
 

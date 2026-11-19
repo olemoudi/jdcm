@@ -48,7 +48,10 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
         val f = dev.jdcm.ui.home.readHealthFacts(c, kids.isNotEmpty(), nowMs)
         val issues = dev.jdcm.core.policy.BackgroundHealth.issues(f, nowMs)
         val snoozed = c.settings.healthSnoozed.filterValues { it > nowMs }
+        val oemPages = dev.jdcm.oem.OemPower.available(c.app, dev.jdcm.oem.OemPageKind.AUTOSTART, dev.jdcm.oem.OemPageKind.BATTERY)
         listOf(
+            "oem=${dev.jdcm.oem.OemPower.oem} autostartMode=${dev.jdcm.oem.OemPower.xiaomiAutostartMode(c.app) ?: "-"} " +
+                "pages=${oemPages.joinToString(",") { it.kind.name.lowercase() + ":" + it.pkg }.ifEmpty { "none" }}",
             dev.jdcm.ui.home.describeHealth(f, nowMs),
             "issues=${issues.ifEmpty { listOf("none") }.joinToString()} snoozed=${snoozed.keys.ifEmpty { listOf("none") }.joinToString()} " +
                 "workerLastRun=${at(c.settings.workerLastRunMs)} scheduledAt=${at(c.settings.workerScheduledAtMs)} lateFixAt=${at(c.settings.healthLateFixAtMs)}",

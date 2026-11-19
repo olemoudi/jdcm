@@ -277,4 +277,20 @@
     <string name="form_win">won</string>
     <string name="form_draw">drew</string>
     <string name="form_loss">lost</string>
+    <!-- 0.2.10: the phone makers' power managers -->
+    <string name="health_autostart_title">Turn on JDCM\'s «Autostart»</string>
+    <string name="health_autostart_text">On Xiaomi phones, without it JDCM cannot check for changes or notify you once the app is closed or the phone restarts.</string>
+    <string name="ob_oem_title">On your %1$s, one more step</string>
+    <string name="oem_xiaomi_text">Xiaomi phones stop apps installed from outside their store: turn on JDCM\'s «Autostart» and, in its battery saver, choose «No restrictions».</string>
+    <string name="oem_samsung_text">Samsung phones put apps you seldom open «to sleep»: in Battery, Background usage limits, add JDCM to «Never sleeping apps».</string>
+    <string name="oem_huawei_text">In App launch, turn off «Manage automatically» for JDCM and leave auto-launch, secondary launch and run in background on.</string>
+    <string name="oem_oppo_text">Allow JDCM «Auto launch» and, in its battery settings, «Background activity».</string>
+    <string name="oem_vivo_text">Allow JDCM «Autostart» and «High background power consumption».</string>
+    <string name="oem_open_autostart">Open «Autostart»</string>
+    <string name="oem_open_battery">Open JDCM\'s battery saver</string>
+    <string name="oem_open">Open %1$s settings</string>
+    <string name="oem_open_app_info">Open app info</string>
+    <string name="oem_autostart_on">Autostart is on</string>
+    <string name="settings_oem_title">Keep your %1$s from holding notices back</string>
+    <string name="oem_tip_done">Done</string>
 </resources>

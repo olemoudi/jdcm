@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.BugReport
+import androidx.compose.material.icons.outlined.BatteryAlert
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.NewReleases
 import androidx.compose.material.icons.outlined.NotificationsOff
@@ -150,6 +151,16 @@ fun SettingsScreen(
                                     ctx.startActivity(Intent(AndroidSettings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(AndroidSettings.EXTRA_APP_PACKAGE, ctx.packageName))
                                 }
                             },
+                        )
+                        Hairline()
+                    }
+                    // The maker's own power manager (Xiaomi, Samsung, Huawei, OPPO, vivo…): always one tap away.
+                    val oem = dev.jdcm.oem.OemPower.oem
+                    dev.jdcm.ui.onboarding.oemText(oem)?.let { hint ->
+                        DoorRow(
+                            stringResource(R.string.settings_oem_title, oem.brand), hint,
+                            Icons.Outlined.BatteryAlert, JdcmColors.extra.link,
+                            onClick = { dev.jdcm.oem.OemPower.open(ctx, "settings", dev.jdcm.oem.OemPageKind.AUTOSTART, dev.jdcm.oem.OemPageKind.BATTERY) },
                         )
                         Hairline()
                     }

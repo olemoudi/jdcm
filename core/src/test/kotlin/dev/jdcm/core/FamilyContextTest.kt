@@ -213,6 +213,24 @@ class FamilyContextTest {
     }
 
     @Test
+    fun `a Xiaomi's autostart off comes right after a restricted battery`() {
+        assertEquals(listOf(HealthIssue.AUTOSTART_OFF), BackgroundHealth.issues(healthy.copy(autostartOff = true), now))
+        assertEquals(
+            listOf(HealthIssue.NOTIFICATIONS_OFF, HealthIssue.BACKGROUND_RESTRICTED, HealthIssue.AUTOSTART_OFF),
+            BackgroundHealth.issues(healthy.copy(autostartOff = true, backgroundRestricted = true, notificationsAllowed = false), now),
+        )
+        assertTrue(BackgroundHealth.issues(healthy.copy(autostartOff = true, wantsNotifications = false, wantsChanges = false), now).isEmpty())
+    }
+
+    @Test
+    fun `the maker's tip comes last, and never next to a read autostart`() {
+        assertEquals(listOf(HealthIssue.OEM_TIP), BackgroundHealth.issues(healthy.copy(oemTip = true), now))
+        assertEquals(listOf(HealthIssue.CHANGES_CHANNEL_OFF, HealthIssue.OEM_TIP), BackgroundHealth.issues(healthy.copy(oemTip = true, changesChannelOff = true), now))
+        assertEquals(listOf(HealthIssue.AUTOSTART_OFF), BackgroundHealth.issues(healthy.copy(oemTip = true, autostartOff = true), now))
+        assertTrue(BackgroundHealth.issues(healthy.copy(oemTip = true, wantsNotifications = false, wantsChanges = false), now).isEmpty())
+    }
+
+    @Test
     fun `exact alarms matter only for the pre-match checks`() {
         assertEquals(listOf(HealthIssue.EXACT_ALARMS_OFF), BackgroundHealth.issues(healthy.copy(exactAlarmsAllowed = false), now))
         assertTrue(BackgroundHealth.issues(healthy.copy(exactAlarmsAllowed = false, wantsChanges = false), now).isEmpty())

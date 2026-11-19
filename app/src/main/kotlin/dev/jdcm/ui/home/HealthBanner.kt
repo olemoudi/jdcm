@@ -84,6 +84,7 @@ fun readHealthFacts(c: AppContainer, hasKids: Boolean, nowMs: Long = System.curr
         cm.activeNetwork?.let { cm.getNetworkCapabilities(it) }?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
     }.getOrDefault(false)
     val bootMs = nowMs - SystemClock.elapsedRealtime()
+    val autostart = dev.jdcm.oem.OemPower.xiaomiAutostart(ctx)
     @Suppress("DEPRECATION")
     val updatedMs = runCatching { ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime }.getOrDefault(0L)
     return HealthFacts(
@@ -97,6 +98,15 @@ fun readHealthFacts(c: AppContainer, hasKids: Boolean, nowMs: Long = System.curr
         exactAlarmsAllowed = PreMatch.canExact(ctx.getSystemService(AlarmManager::class.java)),
         wantsChanges = s.notifyChanges,
         hasKids = hasKids,
+        autostartOff = autostart == false,
+        oemTip = !c.settings.oemTipDone && when (dev.jdcm.oem.OemPower.oem) {
+            dev.jdcm.oem.Oem.OTHER -> false
+            // Read on a Xiaomi: AUTOSTART_OFF speaks when it is off; the tip only when it cannot be read.
+            dev.jdcm.oem.Oem.XIAOMI -> autostart == null
+            // Samsung's sleeping apps do not touch an unrestricted battery.
+            dev.jdcm.oem.Oem.SAMSUNG -> !Perms.batteryUnrestricted(ctx)
+            else -> true
+        },
         // lastBackgroundSyncMs: what builds before 0.2.8 stamped (after a sync with children).
         lastBackgroundRunMs = maxOf(c.settings.workerLastRunMs, c.settings.lastBackgroundSyncMs),
         sinceMs = maxOf(maxOf(c.settings.workerScheduledAtMs, bootMs), maxOf(updatedMs, c.settings.healthLateFixAtMs)),
@@ -109,7 +119,7 @@ fun describeHealth(f: HealthFacts, nowMs: Long = System.currentTimeMillis()): St
     return "notif=${f.notificationsAllowed} wants=${f.wantsNotifications} changesChannelOff=${f.changesChannelOff} " +
         "restricted=${f.backgroundRestricted} battery=${if (f.batteryUnrestricted) "unrestricted" else "optimised"} " +
         "dataSaver=${f.dataSaverBlocks} online=${f.online} exact=${f.exactAlarmsAllowed} kids=${f.hasKids} " +
-        "lastRun=${ago(f.lastBackgroundRunMs)} since=${ago(f.sinceMs)}"
+        "autostartOff=${f.autostartOff} oemTip=${f.oemTip} lastRun=${ago(f.lastBackgroundRunMs)} since=${ago(f.sinceMs)}"
 }
 
 /**
@@ -166,6 +176,9 @@ fun HealthBanner(c: AppContainer, facts: HealthFacts?) {
         val (title, text) = when (i) {
             HealthIssue.NOTIFICATIONS_OFF -> stringResource(R.string.health_notif_title) to stringResource(R.string.health_notif_text)
             HealthIssue.BACKGROUND_RESTRICTED -> stringResource(R.string.health_restricted_title) to stringResource(R.string.health_restricted_text)
+            HealthIssue.AUTOSTART_OFF -> stringResource(R.string.health_autostart_title) to stringResource(R.string.health_autostart_text)
+            HealthIssue.OEM_TIP -> stringResource(R.string.ob_oem_title, dev.jdcm.oem.OemPower.oem.brand) to
+                (dev.jdcm.ui.onboarding.oemText(dev.jdcm.oem.OemPower.oem) ?: "")
             HealthIssue.CHANGES_CHANNEL_OFF -> stringResource(R.string.health_channel_title) to stringResource(R.string.health_channel_text)
             HealthIssue.LATE_BATTERY -> stringResource(R.string.health_late_title) to "$late ${stringResource(R.string.health_late_battery)}"
             HealthIssue.LATE_DATA_SAVER -> stringResource(R.string.health_late_title) to "$late ${stringResource(R.string.health_late_data)}"
@@ -176,7 +189,7 @@ fun HealthBanner(c: AppContainer, facts: HealthFacts?) {
             when (i) {
                 HealthIssue.NOTIFICATIONS_OFF, HealthIssue.CHANGES_CHANNEL_OFF -> R.string.health_fix_turn_on
                 HealthIssue.LATE_BATTERY, HealthIssue.LATE_DATA_SAVER, HealthIssue.EXACT_ALARMS_OFF -> R.string.health_fix_allow
-                HealthIssue.BACKGROUND_RESTRICTED, HealthIssue.LATE_OTHER -> R.string.health_fix_open
+                HealthIssue.BACKGROUND_RESTRICTED, HealthIssue.LATE_OTHER, HealthIssue.AUTOSTART_OFF, HealthIssue.OEM_TIP -> R.string.health_fix_open
             },
         )
         val icon = when (i) {
@@ -200,7 +213,14 @@ fun HealthBanner(c: AppContainer, facts: HealthFacts?) {
                 }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = {
+                if (i == HealthIssue.OEM_TIP) {
+                    TextButton(onClick = {
+                        c.settings.oemTipDone = true
+                        val next = snoozed + (i.name to Long.MAX_VALUE)
+                        snoozed = next
+                        DiagLog.i("UI", "health banner: oem tip done")
+                    }, modifier = Modifier.heightIn(min = 48.dp)) { Text(stringResource(R.string.oem_tip_done)) }
+                } else TextButton(onClick = {
                     val next = snoozed + (i.name to System.currentTimeMillis() + HEALTH_BANNER_SNOOZE_MS)
                     snoozed = next
                     c.settings.healthSnoozed = next
@@ -214,7 +234,10 @@ fun HealthBanner(c: AppContainer, facts: HealthFacts?) {
                     when (i) {
                         HealthIssue.NOTIFICATIONS_OFF -> Perms.openNotificationSettings(ctx)
                         HealthIssue.CHANGES_CHANNEL_OFF -> Perms.openChannelSettings(ctx, Notifier.CH_CHANGES)
-                        HealthIssue.BACKGROUND_RESTRICTED, HealthIssue.LATE_OTHER -> Perms.openAppDetails(ctx)
+                        HealthIssue.BACKGROUND_RESTRICTED -> Perms.openAppDetails(ctx)
+                        // The maker's own switches first (Xiaomi, Huawei, OPPO, vivo…), else App info.
+                        HealthIssue.AUTOSTART_OFF, HealthIssue.LATE_OTHER, HealthIssue.OEM_TIP ->
+                            dev.jdcm.oem.OemPower.open(ctx, i.name, dev.jdcm.oem.OemPageKind.AUTOSTART, dev.jdcm.oem.OemPageKind.BATTERY)
                         HealthIssue.LATE_BATTERY -> Perms.askBatteryUnrestricted(ctx)
                         HealthIssue.LATE_DATA_SAVER -> Perms.openDataSaverSettings(ctx)
                         HealthIssue.EXACT_ALARMS_OFF -> Perms.openExactAlarmSettings(ctx)

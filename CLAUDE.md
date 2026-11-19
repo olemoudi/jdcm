@@ -104,6 +104,19 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   the AVD). Data saver is the cause only on a metered network; nothing about the background when every notice is
   off in the app. Known: a phone offline for hours that just reconnected may read «late» until its next check.
   Diagnostics → «Health banner».
+- **Phone makers** (0.2.10, `oem/`; owner, 2026-11-19: «revisa la fiabilidad en un Xiaomi y otros OEM»): sideloaded
+  apps get «Inicio automático» off on Xiaomi (MIUI/HyperOS), Huawei/Honor, OPPO/realme/OnePlus (ColorOS) and vivo;
+  without it, after a reboot or a swipe from recents nothing runs (no sync, reminder, pre-match). `Oem.of(MANUFACTURER,
+  BRAND)`; `OemPages` lists each maker's autostart/battery pages, all in the manifest `<queries>` (OemTest);
+  `OemPower.open` tries the installed, exported ones in turn, App info last, and logs which. Xiaomi's switch is read
+  (`android.miui.AppOpsUtils.getApplicationAutoStart`: 0 allowed, 1 refused, else unknown) → health issue
+  AUTOSTART_OFF. Where it cannot be read, a one-time OEM_TIP on Home («Ya está» ends it; the guide's battery page
+  shows the same step to new installs and sets `oemTipDone`); Samsung only while the battery is optimised (its
+  «suspensión» spares unrestricted apps). Settings → «Que tu X no frene los avisos», always. Debug builds only:
+  device pref `debugOem` makes the app pretend to be a maker (walk the flows on the AVD). Not verified on each
+  maker's real phones: component names come from public lists (dontkillmyapp, AutoStarter); a missing one falls back
+  to App info. BootReceiver also takes QUICKBOOT_POWERON. An OEM installer that insists on a tap gets the updater's
+  PendingConfirmation notification (unchanged).
 - **Result notice** (0.2.8): «Ahora 2º de 8 (sube 1)» first (`Standings.place`: today's matches against the same
   matches with this sync's new results taken back — never an older copy; no place while rounds are missing; a
   tie says «(empatado)» and no move), then the score, then «Próximo: …» (the next match that is on). The match sheet shows «Cómo

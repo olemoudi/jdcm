@@ -277,4 +277,20 @@
     <string name="form_win">ganó</string>
     <string name="form_draw">empató</string>
     <string name="form_loss">perdió</string>
+    <!-- 0.2.10: the phone makers' power managers -->
+    <string name="health_autostart_title">Activa el «Inicio automático» de JDCM</string>
+    <string name="health_autostart_text">En los Xiaomi, sin él JDCM no puede comprobar cambios ni avisarte con la app cerrada o tras reiniciar el móvil.</string>
+    <string name="ob_oem_title">En tu %1$s, un paso más</string>
+    <string name="oem_xiaomi_text">Los Xiaomi paran las apps instaladas fuera de su tienda: activa el «Inicio automático» de JDCM y, en su ahorro de batería, elige «Sin restricciones».</string>
+    <string name="oem_samsung_text">Los Samsung dejan «en suspensión» las apps que no abres a menudo: en Batería, Límites de uso en segundo plano, añade JDCM a «Aplicaciones que nunca entran en suspensión».</string>
+    <string name="oem_huawei_text">En Inicio de aplicaciones, desactiva «Gestionar automáticamente» para JDCM y deja activados el inicio automático, el inicio secundario y la ejecución en segundo plano.</string>
+    <string name="oem_oppo_text">Permite a JDCM el «Inicio automático» y, en su batería, la «Actividad en segundo plano».</string>
+    <string name="oem_vivo_text">Permite a JDCM el «Inicio automático» y el «Alto consumo en segundo plano».</string>
+    <string name="oem_open_autostart">Abrir «Inicio automático»</string>
+    <string name="oem_open_battery">Abrir ahorro de batería de JDCM</string>
+    <string name="oem_open">Abrir ajustes de %1$s</string>
+    <string name="oem_open_app_info">Abrir información de la app</string>
+    <string name="oem_autostart_on">Inicio automático activado</string>
+    <string name="settings_oem_title">Que tu %1$s no frene los avisos</string>
+    <string name="oem_tip_done">Ya está</string>
 </resources>
