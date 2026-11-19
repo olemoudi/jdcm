@@ -10,6 +10,7 @@ import dev.jdcm.core.model.GroupSnapshot
 import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.Match
 import dev.jdcm.core.model.MatchStatus
+import dev.jdcm.core.schedule.Clashes
 import dev.jdcm.core.schedule.Schedule
 import dev.jdcm.data.Kid
 import dev.jdcm.diag.DiagLog
@@ -74,6 +75,14 @@ object Reminders {
     ): List<Pair<Kid, Match>> =
         candidates(kids, snapshots, hour, now, reminded).filter { !it.first.isAfter(now.plusMinutes(1)) }.map { it.second to it.third }
 
+    /** A sibling's match the same day that [m] clashes with (Clashes), with that sibling. */
+    fun clashFor(kid: Kid, m: Match, kids: List<Kid>, snapshots: Map<Int, GroupSnapshot>): Pair<Kid, Match>? {
+        val day = m.day ?: return null
+        val entries = kids.flatMap { k -> snapshots[k.groupId]?.teamMatches(k.teamId).orEmpty().filter { it.day == day }.map { k.id to it } }
+        val other = Clashes.find(entries).firstNotNullOfOrNull { it.other(kid.id, m.id) } ?: return null
+        return kids.firstOrNull { it.id == other.first }?.let { it to other.second }
+    }
+
     /** An inexact alarm comes up to an hour late; past this, the eve is gone and no reminder is better than a wrong one. */
     private const val LATE_MINUTES = 90L
 
@@ -130,8 +139,11 @@ object Reminders {
         if (s.notifyReminder) {
             val due = dueNow(kids, c.repository.snapshots.value, s.reminderHour, now, reminded)
             if (due.isEmpty()) DiagLog.i(TAG, "fired: nothing due now")
+            val snaps = c.repository.snapshots.value
             for ((kid, m) in due) {
-                c.notifier.reminder(kid, m)
+                val clash = clashFor(kid, m, kids, snaps)
+                if (clash != null) DiagLog.i(TAG, "match #${m.id} clashes with #${clash.second.id} (#${clash.first.id.take(8)})")
+                c.notifier.reminder(kid, m, clash)
                 reminded += key(kid, m)
             }
             c.settings.remindedMatchIds = reminded

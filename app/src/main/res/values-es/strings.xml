@@ -228,4 +228,36 @@
     <string name="not_loaded">Aún no hay datos de este grupo.</string>
     <string name="strip_legend_one">= juega ese día</string>
     <string name="strip_legend_many">= juegan ese día</string>
+    <!-- 0.2.8: health banner, season, result context, clashes -->
+    <string name="health_notif_title">Los avisos de JDCM están desactivados</string>
+    <string name="health_notif_text">No te llegarán cambios de hora ni de campo, resultados ni recordatorios.</string>
+    <string name="health_restricted_title">Android no deja trabajar a JDCM</string>
+    <string name="health_restricted_text">Su uso de batería está en «Restringida»: no puede comprobar cambios ni avisarte. Ponlo en «Optimizada» o «Sin restricciones».</string>
+    <string name="health_channel_title">Los avisos de cambios están silenciados</string>
+    <string name="health_channel_text">No te avisaremos si cambia la hora o el campo de un partido, ni si se suspende.</string>
+    <string name="health_late_title">Android está frenando a JDCM</string>
+    <string name="health_late_text">La última comprobación en segundo plano fue %1$s: los avisos pueden llegar tarde.</string>
+    <string name="health_late_never">Aún no ha podido comprobar nada en segundo plano: los avisos pueden llegar tarde.</string>
+    <string name="health_late_battery">Déjale usar la batería sin restricciones.</string>
+    <string name="health_late_data">El ahorro de datos no le deja usar datos móviles en segundo plano.</string>
+    <string name="health_late_other">Tu móvil la detiene: en los ajustes de JDCM, busca la batería o el inicio automático y deja que funcione en segundo plano.</string>
+    <string name="health_exact_title">Comprobaciones antes del partido con retraso</string>
+    <string name="health_exact_text">Sin el permiso de «Alarmas y recordatorios», las comprobaciones de las horas antes de cada partido pueden llegar tarde.</string>
+    <string name="health_fix_turn_on">Activar</string>
+    <string name="health_fix_allow">Permitir</string>
+    <string name="health_fix_open">Abrir ajustes</string>
+    <string name="notif_result_place">Ahora %1$dº de %2$d</string>
+    <string name="notif_place_up">(sube %1$d)</string>
+    <string name="notif_place_down">(baja %1$d)</string>
+    <string name="notif_result_next">Próximo: %1$s contra %2$s</string>
+    <string name="notif_clash">Coincide con %1$s: %2$s en %3$s</string>
+    <string name="clash_title">%1$s y %2$s juegan casi a la vez</string>
+    <string name="clash_line">%1$s · %2$s · %3$s</string>
+    <string name="clash_hint">En sitios distintos y sin tiempo para ir de uno a otro.</string>
+    <string name="season_new_title">Nueva temporada %1$s</string>
+    <string name="season_new_text">La de %1$s ha terminado: elige su nuevo equipo para seguir sus partidos.</string>
+    <string name="season_new_fix">Elegir equipo</string>
+    <string name="detail_form">Cómo llegan</string>
+    <string name="detail_meeting">Enfrentamiento anterior</string>
+    <string name="form_none">aún sin partidos</string>
 </resources>

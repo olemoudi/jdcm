@@ -4,6 +4,10 @@ import dev.jdcm.core.model.GroupSnapshot
 import dev.jdcm.core.model.Match
 import dev.jdcm.core.model.MatchStatus
 import dev.jdcm.core.model.Venue
+import dev.jdcm.core.schedule.Schedule
+import dev.jdcm.core.standings.PointsRule
+import dev.jdcm.core.standings.Standings
+import dev.jdcm.core.standings.TablePlace
 import java.time.LocalDateTime
 
 /** Something about a followed team's match that a parent wants to hear about without opening the app. */
@@ -19,7 +23,16 @@ sealed interface MatchChange {
     /** Postponed, taken off the calendar, not held — or back on. */
     data class StatusChanged(override val match: Match, override val teamId: Int, val before: MatchStatus) : MatchChange
 
-    data class ResultIn(override val match: Match, override val teamId: Int) : MatchChange
+    /**
+     * [place]: where the team stands now (and stood before this sync); [next]: its next match. Both
+     * only for the notification's text, null when unknown.
+     */
+    data class ResultIn(
+        override val match: Match,
+        override val teamId: Int,
+        val place: TablePlace? = null,
+        val next: Match? = null,
+    ) : MatchChange
 }
 
 object MatchChanges {
@@ -42,7 +55,8 @@ object MatchChanges {
                 // A "result" for a match not played yet is the site's data being odd (an early
                 // closed flag, a stray score), not news: never announce it.
                 if (m.day?.isAfter(today) != false) continue
-                out += MatchChange.ResultIn(m, teamId)
+                val place = runCatching { Standings.place(before.matches, after.matches, teamId, PointsRule.forSport(after.sport)) }.getOrNull()
+                out += MatchChange.ResultIn(m, teamId, place, Schedule.next(after, teamId, now))
                 continue
             }
             if (m.hasResult) continue

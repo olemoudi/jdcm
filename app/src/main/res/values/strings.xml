@@ -228,4 +228,36 @@
     <string name="not_loaded">No data for this group yet.</string>
     <string name="strip_legend_one">= plays that day</string>
     <string name="strip_legend_many">= play that day</string>
+    <!-- 0.2.8: health banner, season, result context, clashes -->
+    <string name="health_notif_title">JDCM\'s notifications are off</string>
+    <string name="health_notif_text">You will not hear about time or field changes, results or reminders.</string>
+    <string name="health_restricted_title">Android is not letting JDCM work</string>
+    <string name="health_restricted_text">Its battery use is set to «Restricted»: it cannot check for changes or notify you. Set it to «Optimised» or «Unrestricted».</string>
+    <string name="health_channel_title">Change notifications are muted</string>
+    <string name="health_channel_text">You will not hear when a match\'s time or field changes, or when it is called off.</string>
+    <string name="health_late_title">Android is holding JDCM back</string>
+    <string name="health_late_text">The last background check was %1$s: notifications may come late.</string>
+    <string name="health_late_never">It has not managed a background check yet: notifications may come late.</string>
+    <string name="health_late_battery">Let it use the battery without restrictions.</string>
+    <string name="health_late_data">Data saver stops it using mobile data in the background.</string>
+    <string name="health_late_other">Your phone is stopping it: in JDCM\'s settings, look for battery or auto-start and let it run in the background.</string>
+    <string name="health_exact_title">Pre-match checks may be late</string>
+    <string name="health_exact_text">Without the «Alarms &amp; reminders» permission, the checks in the hours before each match may come late.</string>
+    <string name="health_fix_turn_on">Turn on</string>
+    <string name="health_fix_allow">Allow</string>
+    <string name="health_fix_open">Open settings</string>
+    <string name="notif_result_place">Now #%1$d of %2$d</string>
+    <string name="notif_place_up">(up %1$d)</string>
+    <string name="notif_place_down">(down %1$d)</string>
+    <string name="notif_result_next">Next: %1$s against %2$s</string>
+    <string name="notif_clash">Same time as %1$s: %2$s in %3$s</string>
+    <string name="clash_title">%1$s and %2$s play at nearly the same time</string>
+    <string name="clash_line">%1$s · %2$s · %3$s</string>
+    <string name="clash_hint">In different places, with no time to get from one to the other.</string>
+    <string name="season_new_title">New season %1$s</string>
+    <string name="season_new_text">%1$s\'s season is over: pick their new team to keep following their matches.</string>
+    <string name="season_new_fix">Pick team</string>
+    <string name="detail_form">Form</string>
+    <string name="detail_meeting">Previous meeting</string>
+    <string name="form_none">no matches yet</string>
 </resources>

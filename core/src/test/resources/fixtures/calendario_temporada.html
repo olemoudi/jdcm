@@ -1,0 +1,28 @@
+<!-- Trimmed from https://juegosdeportivos.ecmadrid.org/Calendarios/CalendarioTemporada (2026-11-19): the page script that names the season picker first, then the picker and the competition picker after it. -->
+<script>
+    function getCalendarioIdTemporadaValue() {
+        let instance = $("#datosCalendario #cmbCalendarioTemporada").dxSelectBox("instance");
+        return instance ? (instance.option("value") ?? 0) : 12;
+    }
+
+    // Por defecto el combo sólo lista las competiciones activas, que son las que busca quien entra a
+    // consultar (jugadores, familias...). Las cerradas se ven marcando la casilla.
+    function getCalendarioSoloActivasValue() {
+        let instance = $("#datosCalendario #chkCalendarioVerCerradas").dxCheckBox("instance");
+        return !(instance ? instance.option("value") : false);
+    }
+
+    // "TODAS" son las competiciones activas de la temporada activa (ver CalendariosService), así que sólo
+    // se ofrece en esa temporada.
+    function getCalendarioElementoTodasValue() {
+        let idTemporada = getCalendarioIdTemporadaValue();
+        return !idTemporada || idTemporada == 12;
+    }
+</script>
+DevExpress.utils.readyCallbacks.add((function($){$("#loadPanelCalendario").dxLoadPanel({"shadingColor":"rgba(0,0,0,0.4)","visible":false,"showIndicator":true,"showPane":true,"shading":true,"hideOnOutsideClick":false});}).bind(this, jQuery));</script>
+    <div class="row justify-content-center">
+            <div class="col-12 col-md-6 col-xl p-2 d-none">
+                <div id="cmbCalendarioTemporada"></div><script>
+DevExpress.utils.readyCallbacks.add((function($){$("#cmbCalendarioTemporada").dxSelectBox({"inputAttr":{"aria-label":"Temporada"},"label":"Temporada","labelMode":"floating","dataSource":{"store":new DevExpress.data.ArrayStore({"data":[{"Id":12,"Nombre":"TEMPORADA 2026-2027","Inicio":new Date(2026, 6, 1),"Fin":new Date(2027, 5, 30),"PreinscripcionDesde":null,"PreinscripcionHasta":null,"BajasHasta":null,"Activa":true,"Competiciones":null},{"Id":10,"Nombre":"TEMPORADA 2025-2026","Inicio":new Date(2025, 6, 1),"Fin":new Date(2026, 5, 15),"PreinscripcionDesde":null,"PreinscripcionHasta":null,"BajasHasta":null,"Activa":false,"Competiciones":null},{"Id":1,"Nombre":"TEMPORADA 2024-2025","Inicio":new Date(2024, 8, 1),"Fin":new Date(2024, 5, 30),"PreinscripcionDesde":null,"PreinscripcionHasta":null,"BajasHasta":null,"Activa":false,"Competiciones":null}]})},"displayExpr":"Nombre","valueExpr":"Id","onValueChanged":window.onCalendarioTemporadaValueChanged,"value":12});}).bind(this, jQuery));</script>
+                <div id="chkCalendarioVerCerradas"></div><script>
+DevExpress.utils.readyCallbacks.add((function($){$("#cmbCalendarioCompeticion").dxSelectBox({"inputAttr":{"aria-label":"Competicion"},"label":"Competici\u00F3n","labelMode":"floating","searchEnabled":true,"searchExpr":["Nombre"],"searchMode":"contains","displayExpr":"Nombre","valueExpr":"Id","dataSource":{"store":DevExpress.data.AspNet.createStore({"loadParams":{"IdDeporte":window.getCalendarioIdDeporteValue,"IdTemporada":window.getCalendarioIdTemporadaValue,"elementoTodas":window.getCalendarioElementoTodasValue,"soloActivas":window.getCalendarioSoloActivasValue},"key":"Id","loadUrl":"/api/CompeticionesPorDeporte?action=ObtenerCompeticionesDeporteListado"})},"onValueChanged":window.onCalendarioCompeticionValueChanged,"value":0});}).bind(this, jQuery));</script>

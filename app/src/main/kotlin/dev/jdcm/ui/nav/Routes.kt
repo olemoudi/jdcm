@@ -32,7 +32,8 @@ data class GroupRoute(
 data class TeamRoute(val groupId: Int, val sportId: Int, val competitionId: Int, val categoryId: Int, val teamId: Int)
 
 /** Add (kidId null) or edit a child. */
-@Serializable data class KidEditorRoute(val kidId: String? = null, val presetTeamId: Int = 0, val presetGroupId: Int = 0, val presetSportId: Int = 0, val presetCompetitionId: Int = 0, val presetCategoryId: Int = 0)
+/** [changeTeam]: an existing child, straight into picking a new team (Home's «Nueva temporada»). */
+@Serializable data class KidEditorRoute(val kidId: String? = null, val presetTeamId: Int = 0, val presetGroupId: Int = 0, val presetSportId: Int = 0, val presetCompetitionId: Int = 0, val presetCategoryId: Int = 0, val changeTeam: Boolean = false)
 
 @Serializable data object SettingsRoute
 @Serializable data object ChangelogRoute

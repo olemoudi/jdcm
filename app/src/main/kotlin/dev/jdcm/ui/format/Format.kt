@@ -58,6 +58,9 @@ class Format(private val context: Context) {
         return listOf(v.name, place).filter { it.isNotBlank() }.joinToString(" · ")
     }
 
+    /** The town, else the field's name: enough to tell two places apart in one line. */
+    fun placeShort(v: Venue?): String = v?.town?.takeIf { it.isNotBlank() } ?: v?.name?.takeIf { it.isNotBlank() } ?: context.getString(R.string.no_venue)
+
     /** «hace 5 min», «hace 2 h», «ayer 18:04». */
     fun age(ms: Long, nowMs: Long = System.currentTimeMillis()): String {
         val mins = ((nowMs - ms) / 60_000).coerceAtLeast(0)

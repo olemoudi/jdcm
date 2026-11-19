@@ -123,4 +123,48 @@ class Settings(context: Context) {
     var installBannerSnoozedUntil: Long
         get() = d.getLong("installBannerSnoozedUntil", 0)
         set(v) = d.edit { putLong("installBannerSnoozedUntil", v) }
+
+    /** When the hourly background check last started, children or not: what Home's health banner measures. */
+    var workerLastRunMs: Long
+        get() = d.getLong("workerLastRun", 0)
+        set(v) = d.edit { putLong("workerLastRun", v) }
+
+    /** When this build enqueued the hourly check: no run can be expected before it. */
+    var workerScheduledAtMs: Long
+        get() = d.getLong("workerScheduledAt", 0)
+        set(v) = d.edit { putLong("workerScheduledAt", v) }
+
+    /**
+     * When a «checks held back» warning was last acted on: lateness counts from here again, so a
+     * fixed phone is not told the next cause while it waits for its first check.
+     */
+    var healthLateFixAtMs: Long
+        get() = d.getLong("healthLateFixAt", 0)
+        set(v) = d.edit { putLong("healthLateFixAt", v) }
+
+    /** Home's health banner: each issue's «Más tarde», as issue name → hidden until (epoch ms). */
+    var healthSnoozed: Map<String, Long>
+        get() = d.getStringSet("healthSnoozed", emptySet()).orEmpty().mapNotNull { e ->
+            val until = e.substringAfter(':').toLongOrNull() ?: return@mapNotNull null
+            e.substringBefore(':') to until
+        }.toMap()
+        set(v) = d.edit { putStringSet("healthSnoozed", v.map { "${it.key}:${it.value}" }.toSet()) }
+
+    /**
+     * The season the site's calendar opens on (SeasonWatch reads it weekly); the build's own until then.
+     * Never older than the build's: a stale or odd page cannot take the explorer back a season.
+     */
+    var activeSeasonId: Int
+        get() = d.getInt("activeSeasonId", 0).coerceAtLeast(EcmApi.SEASON_ID)
+        set(v) = d.edit { putInt("activeSeasonId", v) }
+
+    /** «TEMPORADA 2027-2028», as the site names [activeSeasonId]; empty while it is the build's own. */
+    var activeSeasonName: String
+        get() = d.getString("activeSeasonName", "").orEmpty()
+        set(v) = d.edit { putString("activeSeasonName", v) }
+
+    /** When the season was last looked up (or, after a failure, a day before it may be tried again). */
+    var seasonCheckedMs: Long
+        get() = d.getLong("seasonChecked", 0)
+        set(v) = d.edit { putLong("seasonChecked", v) }
 }

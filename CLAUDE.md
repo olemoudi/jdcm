@@ -84,6 +84,27 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
   reads after 30 s and AEMET calls end at 10 s (broadcast budget); a municipality that failed is not
   asked for 30 min. No evening alarm with Android's notifications off.
 - **Settings is a tab** (0.2.4, beside Explorar): every door to it navigates as the tab, no back arrow.
+- **Season without a release** (0.2.8): the calendar page `Calendarios/CalendarioTemporada` writes its season
+  picker inline (`$("#cmbCalendarioTemporada").dxSelectBox({… "data":[{"Id":12,"Nombre":"TEMPORADA 2026-2027",…,
+  "Activa":true}…], "value":12})`; its own script names the picker first, `….dxSelectBox("instance")`).
+  `SeasonWatch` reads it (`SiteParser.activeSeason`) at most weekly, 08–22, from the worker and the app's start;
+  a failure retries in a day. `Settings.activeSeasonId` (never below the build's `EcmApi.SEASON_ID`) feeds the
+  explorer and the team search; each `Kid` keeps the `seasonId` its team was picked in (12 for older ones).
+  Home offers «Nueva temporada … Elegir equipo» (editor straight at the sport step) when the site is on a newer
+  season and the child has nothing ahead.
+- **Health banner** (0.2.8, `core/policy/BackgroundHealth`, `ui/home/HealthBanner`): the most serious of
+  notifications off, battery «Restringida» (or the restricted bucket), the changes channel muted, the hourly
+  check held back > 8 h (counted from the latest of its last run, its scheduling, boot, the app's update and a
+  tapped fix; only online; cause: data saver, battery optimisation or the maker's), exact alarms off (12/12L);
+  one tap to the system screen that fixes it, «Más tarde» = 3 days per issue. Read in the first frame and on
+  every resume; both Home banners sit in one list item that is never 0 high (else a banner that appears later
+  grows above the first visible item, out of sight — seen on the AVD). Diagnostics → «Health banner».
+- **Result notice** (0.2.8): «Ahora 2º de 8 (sube 1)» first (`Standings.place`, before vs after this sync; no
+  move shown when the team had not played), then the score, then «Próximo: …». The match sheet shows «Cómo
+  llegan» (place, points, last five) for a match to play, and «Enfrentamiento anterior» (`Schedule.previousMeeting`).
+- **Siblings' clashes** (0.2.8, `core/schedule/Clashes`): two children, different matches and fields (name +
+  address, or ~300 m), both timed and on, the later starting before the earlier's end (site's `Duracion`, else
+  75 min) + 30 min of travel. A card on Home for that date; a line in the eve reminder.
 
 ## Reliability rules (reviews 2026-11-09 and 2026-11-16)
 
@@ -111,8 +132,7 @@ No backend, no accounts: the site's login area is out of scope (owner, 2026-11-0
 - `JsonFile`: fsync + `.bak`; a corrupt file reads the backup (the children list can't vanish).
 - Crests (Coil) use their own OkHttp dispatcher, one request at a time to the site.
 - Device-only state (`device` prefs: guide done, worker scheduled, reminded, seen) is not backed up.
-- Known limitation: `EcmApi.SEASON_ID` is hard-coded (12 = 2026-27); the explorer and team search need
-  a release at the season rollover (July 2027). Followed groups keep working until then.
+- `EcmApi.SEASON_ID` (12 = 2026-27) is only the floor: the season comes from the site (see «Season without a release»).
 
 ## First run
 
@@ -126,6 +146,9 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
 
 ## Conventions
 
+- Regexes: escape every brace, inside sets too. Android's ICU engine refuses a lone `}` that the JVM (and so
+  every unit test) accepts: 0.2.8's first build failed `SiteParser`'s static init on the AVD and with it every
+  sync. Keep patterns for one feature in their own `object` (lazy), and run a new parser on the AVD.
 - Strings: `res/values/strings.xml` (en) and `res/values-es/strings.xml` (es) hold the same keys and
   placeholders (`StringsParityTest`). Write both in the same change.
 - «Novedades»: `release-notes/<versionName>.json` (`{"es","en"}`), **at most 3 bullets of 140 chars
@@ -246,7 +269,7 @@ NavHost (a crash in 0.2.0's first build). Launcher icon source: `tools/icon/jdcm
 - **When adding code**: every background entry point logs start and outcome; every branch that decides
   *not* to do something the user expects logs why, with its inputs (`key=value`, ids as numbers or
   8-char prefixes); every swallowed exception is `DiagLog.w(tag, "what failed", e)`. Tags in use:
-  `App`, `Source`, `Repo`, `Store`, `SyncWorker`, `Notify`, `Reminder`, `PreMatch`, `Kids`, `UI`, `Update`.
+  `App`, `Source`, `Repo`, `Store`, `SyncWorker`, `Notify`, `Reminder`, `PreMatch`, `Kids`, `UI`, `Update`, `Rain`, `Season`.
 - **Never log** children's names, school/team names, venues, URLs with query strings.
 
 ### Reading a pasted diagnostics report

@@ -15,6 +15,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dev.jdcm.JdcmApp
 import dev.jdcm.core.model.MADRID
+import dev.jdcm.data.SeasonWatch
 import dev.jdcm.data.SyncMode
 import dev.jdcm.diag.DiagLog
 import dev.jdcm.notify.RainWatch
@@ -31,18 +32,23 @@ class SyncWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
     override suspend fun doWork(): Result {
         val app = applicationContext as JdcmApp
         val c = app.container
+        val preMatch = inputData.getBoolean(KEY_PRE_MATCH, false)
+        // Home's health banner measures the hourly runs (the pre-match ones come from an alarm).
+        if (!preMatch) c.settings.workerLastRunMs = System.currentTimeMillis()
         val kids = c.kids.current()
         if (kids.isEmpty()) {
             DiagLog.i(TAG, "run: no children followed")
             return Result.success()
         }
-        if (inputData.getBoolean(KEY_PRE_MATCH, false)) return preMatch(app)
+        if (preMatch) return preMatch(app)
         val started = System.currentTimeMillis()
         DiagLog.i(TAG, "run attempt=$runAttemptCount kids=${kids.size}")
         val outcomes = c.repository.syncKids(SyncMode.BACKGROUND, "worker")
         c.settings.lastBackgroundSyncMs = System.currentTimeMillis()
         // The rain forecast for the children's next matches, and its alerts (RainWatch).
         runCatching { RainWatch.check(app, "worker", throttled = true) }.onFailure { DiagLog.w(TAG, "rain check failed", it) }
+        // Which season the site is on (weekly at most, in the daytime).
+        SeasonWatch.check(c, "worker")
         // The repository re-arms the reminder after any sync that brought data (from here or a screen).
         DiagLog.i(TAG, "end ${outcomes.groupingBy { it }.eachCount()} in ${System.currentTimeMillis() - started}ms")
         return Result.success()

@@ -215,6 +215,19 @@ data class Match(
 
     /** The day it is played on: its own date if set, else the round's. */
     val day: LocalDate? get() = start?.toLocalDate() ?: roundDate
+
+    /** The site's «01:10:00» as 70; null when absent, zero or unreadable. */
+    val durationMinutes: Int?
+        get() = runCatching {
+            val p = duration.split(":")
+            p[0].trim().toInt() * 60 + p[1].trim().toInt()
+        }.getOrNull()?.takeIf { it > 0 }
+}
+
+/** A season of the competition, as the site's calendar page lists it («TEMPORADA 2026-2027»). */
+data class Season(val id: Int, val name: String) {
+    /** «2026-2027», without the site's capitals. */
+    val years: String get() = name.replace(Regex("(?i)temporada"), "").trim().ifBlank { name }
 }
 
 /** One jornada of a group as fetched: the rounds list comes with every fetch. */

@@ -25,6 +25,19 @@ object Schedule {
     fun last(snapshot: GroupSnapshot, teamId: Int): Match? =
         snapshot.teamMatches(teamId).filter { it.hasResult }.maxWithOrNull(MatchOrder)
 
+    /**
+     * The last time the two teams of [m] met in this group with a result (the first leg, for a
+     * second one): another match, same two teams, played. Null for a bye or a first meeting.
+     */
+    fun previousMeeting(snapshot: GroupSnapshot, m: Match): Match? {
+        val a = m.home?.id ?: return null
+        val b = m.away?.id ?: return null
+        return snapshot.matches
+            .filter { it.id != m.id && it.hasResult && it.involves(a) && it.involves(b) }
+            .filter { x -> m.day?.let { d -> x.day?.isAfter(d) != true } ?: true }
+            .maxWithOrNull(MatchOrder)
+    }
+
     /** The weekend a match belongs to, anchored on its Saturday: Friday-evening games count with it. */
     fun weekendOf(day: LocalDate): LocalDate = when (day.dayOfWeek) {
         DayOfWeek.SATURDAY -> day

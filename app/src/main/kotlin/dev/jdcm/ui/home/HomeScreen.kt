@@ -19,12 +19,16 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FamilyRestroom
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.EventBusy
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -62,12 +66,16 @@ import dev.jdcm.R
 import dev.jdcm.core.model.GroupSnapshot
 import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.MatchOrder
+import dev.jdcm.core.model.Season
+import dev.jdcm.core.schedule.Clash
+import dev.jdcm.core.schedule.Clashes
 import dev.jdcm.core.schedule.Schedule
 import dev.jdcm.core.standings.PointsRule
 import dev.jdcm.core.standings.Standings
 import dev.jdcm.data.Kid
 import dev.jdcm.data.SyncMode
 import dev.jdcm.data.SyncStatus
+import dev.jdcm.diag.DiagLog
 import dev.jdcm.ui.LocalActions
 import dev.jdcm.ui.MatchArgs
 import dev.jdcm.ui.components.EmptyState
@@ -101,6 +109,8 @@ fun HomeScreen(
     onExplore: () -> Unit,
     onGroup: (GroupRoute) -> Unit,
     onTeam: (TeamRoute) -> Unit,
+    /** A child's editor, straight at picking their team (a new season). */
+    onEditKid: (String) -> Unit = {},
 ) {
     val kidsOrNull by c.kids.kids.collectAsState()
     val snaps by c.repository.snapshots.collectAsState()
@@ -128,6 +138,12 @@ fun HomeScreen(
     val days = remember(visible, snaps) { Schedule.matchDates(visible.mapNotNull { k -> snaps[k.groupId]?.let { it to k.teamId } }) }
     val focus = remember(days, today) { Schedule.focusDate(days, today) }
     val day = pickedDay?.let(LocalDate::ofEpochDay)?.takeIf { it in days } ?: focus
+    // Two children at nearly the same time in different places, that date (any child: the filter only hides cards).
+    val clashes = remember(kids, snaps, day) {
+        day?.let { d -> Clashes.find(kids.flatMap { k -> snaps[k.groupId]?.teamMatches(k.teamId).orEmpty().filter { it.day == d }.map { k.id to it } }) }.orEmpty()
+    }
+    // The season the site is on (SeasonWatch), for the children whose own one is over.
+    val season = Season(c.settings.activeSeasonId, c.settings.activeSeasonName)
 
     Scaffold(
         topBar = {
@@ -167,7 +183,15 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize().padding(pad),
             ) {
                 LazyColumn(Modifier.fillMaxSize()) {
-                    item(key = "banner") { InstallPermissionBanner(c) }
+                    // One item that is never 0 high: the list anchors on it at the top, so a banner that
+                    // appears later (back from a system screen) pushes the list down instead of growing
+                    // above the first visible item, out of sight (seen on the AVD).
+                    item(key = "banners") {
+                        Column(Modifier.fillMaxWidth().heightIn(min = 1.dp)) {
+                            HealthBanner(c, hasKids = true)
+                            InstallPermissionBanner(c)
+                        }
+                    }
                     item(key = "pills") { KidPills(kids, selectedKid, { selectedKid = it }, onAdd = onAddKid) }
                     item(key = "strip") {
                         if (days.isNotEmpty()) {
@@ -188,8 +212,14 @@ fun HomeScreen(
                             Hairline()
                         }
                     }
+                    if (clashes.isNotEmpty()) item(key = "clashes-$day") {
+                        LaunchedEffect(clashes) {
+                            DiagLog.i("UI", "clash shown on $day: " + clashes.joinToString { "#${it.first.second.id}/#${it.second.second.id}" })
+                        }
+                        clashes.forEach { ClashCard(it, kids) }
+                    }
                     visible.forEach { kid ->
-                        kidSection(kid, snaps[kid.groupId], status[kid.groupId], day, onGroup, onTeam)
+                        kidSection(kid, snaps[kid.groupId], status[kid.groupId], day, season, onGroup, onTeam, onEditKid)
                     }
                     item(key = "bottom") { Spacer(Modifier.height(24.dp)) }
                 }
@@ -222,8 +252,10 @@ private fun LazyListScope.kidSection(
     snap: GroupSnapshot?,
     status: SyncStatus?,
     day: LocalDate?,
+    season: Season,
     onGroup: (GroupRoute) -> Unit,
     onTeam: (TeamRoute) -> Unit,
+    onEditKid: (String) -> Unit,
 ) {
     item(key = "h-${kid.id}") {
         val accent = kidColor(kid.color)
@@ -243,6 +275,11 @@ private fun LazyListScope.kidSection(
             trailing = position?.let { stringResource(R.string.position_points, it.position, it.points) },
             modifier = Modifier.clickable { onGroup(groupRoute(kid, tab = 1)) },
         )
+    }
+    // The site is on a newer season and this child's is over (nothing ahead): their new team.
+    if (season.id > kid.seasonId) item(key = "s-${kid.id}") {
+        val over = remember(snap) { snap == null || Schedule.upcoming(snap, kid.teamId, LocalDateTime.now(MADRID)).isEmpty() }
+        if (over) NewSeasonRow(kid, season) { onEditKid(kid.id) }
     }
     item(key = "b-${kid.id}") {
         val actions = LocalActions.current
@@ -330,6 +367,60 @@ private fun LazyListScope.kidSection(
                 ),
             )
             FreshnessLine(status, snap.newestFetch)
+        }
+    }
+}
+
+/** Two children at nearly the same time in different places: who, when and where, in their colours. */
+@Composable
+private fun ClashCard(clash: Clash, kids: List<Kid>) {
+    val ctx = LocalContext.current
+    val fmt = remember(ctx) { Format(ctx) }
+    val a = kids.firstOrNull { it.id == clash.first.first } ?: return
+    val b = kids.firstOrNull { it.id == clash.second.first } ?: return
+    val extra = JdcmColors.extra
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp).clip(RoundedCornerShape(12.dp))
+            .background(extra.modified.copy(alpha = 0.10f)).padding(14.dp),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Icon(Icons.Outlined.WarningAmber, null, tint = extra.modified)
+        Spacer(Modifier.width(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(stringResource(R.string.clash_title, a.name, b.name), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            listOf(a to clash.first.second, b to clash.second.second).forEach { (k, m) ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(kidColor(k.color)))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.clash_line, fmt.time(m), k.name, fmt.placeShort(m.venue)), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+            Text(stringResource(R.string.clash_hint), style = MaterialTheme.typography.bodySmall, color = extra.muted)
+        }
+    }
+}
+
+/** «Nueva temporada 2027-2028»: the child's season is over and the site is on the next; one tap to pick the new team. */
+@Composable
+private fun NewSeasonRow(kid: Kid, season: Season, onPick: () -> Unit) {
+    LaunchedEffect(kid.id, season.id) { DiagLog.i("UI", "new season offered for #${kid.id.take(8)} kidSeason=${kid.seasonId} site=${season.id}") }
+    val extra = JdcmColors.extra
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).clip(RoundedCornerShape(12.dp))
+            .background(extra.link.copy(alpha = 0.10f)).padding(start = 14.dp, end = 8.dp, top = 12.dp, bottom = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.Top) {
+            Icon(Icons.Outlined.Autorenew, null, tint = extra.link)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.season_new_title, season.years), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.season_new_text, kid.name), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            TextButton(onClick = onPick, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(R.string.season_new_fix), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            }
         }
     }
 }

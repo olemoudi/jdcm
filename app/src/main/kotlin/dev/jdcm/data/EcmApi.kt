@@ -6,6 +6,7 @@ import dev.jdcm.core.model.Competition
 import dev.jdcm.core.model.Group
 import dev.jdcm.core.model.GroupedRound
 import dev.jdcm.core.model.RoundPage
+import dev.jdcm.core.model.Season
 import dev.jdcm.core.parse.SiteParser
 import dev.jdcm.core.parse.UnexpectedResponse
 import dev.jdcm.diag.DiagLog
@@ -68,7 +69,14 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
             "NumeroJornada" to number, "IdEquipo" to 0,
         ) { SiteParser.groupedRound(it) }
 
-    private suspend fun <T> get(name: String, path: String, vararg params: Pair<String, Any>, parse: (String) -> T): T =
+    /**
+     * The season the site's calendar page opens on, from the season picker written inline in it (an
+     * HTML page, ~80 KB: asked weekly at most, see SeasonWatch). Null when the page has no picker.
+     */
+    suspend fun season(): Season? =
+        get("season", "Calendarios/CalendarioTemporada", ajax = false) { SiteParser.activeSeason(it) }
+
+    private suspend fun <T> get(name: String, path: String, vararg params: Pair<String, Any>, ajax: Boolean = true, parse: (String) -> T): T =
         withContext(Dispatchers.IO) {
             val url = base.newBuilder().addPathSegments(path).apply {
                 params.forEach { (k, v) -> addQueryParameter(k, v.toString()) }
@@ -82,7 +90,7 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
                     val body = gate.withLock {
                         val since = System.currentTimeMillis() - lastRequestAt
                         if (since < MIN_GAP_MS) delay(MIN_GAP_MS - since)
-                        try { fetch(url) } finally { lastRequestAt = System.currentTimeMillis() }
+                        try { fetch(url, ajax) } finally { lastRequestAt = System.currentTimeMillis() }
                     }
                     val parsed = parse(body)
                     DiagLog.i(TAG, "$name ok ${System.currentTimeMillis() - started}ms ${body.length}B")
@@ -104,11 +112,14 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
             error("unreachable")
         }
 
-    private fun fetch(url: HttpUrl): String {
+    /** [ajax]: the calls its pages make (JSON); false for a page itself (HTML, as a browser asks for it). */
+    private fun fetch(url: HttpUrl, ajax: Boolean = true): String {
         val req = Request.Builder().url(url)
             .header("User-Agent", USER_AGENT)
-            .header("Accept", "application/json, text/javascript, */*; q=0.01")
-            .header("X-Requested-With", "XMLHttpRequest")
+            .apply {
+                if (ajax) header("Accept", "application/json, text/javascript, */*; q=0.01").header("X-Requested-With", "XMLHttpRequest")
+                else header("Accept", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8")
+            }
             .build()
         http.newCall(req).execute().use { resp ->
             // A redirect to /Login (followed by OkHttp) shows up as HTML: the parser reports it.
@@ -131,7 +142,11 @@ class EcmApi(private val http: OkHttpClient, private val base: HttpUrl = BASE) {
     companion object {
         private const val TAG = "Source"
         val BASE: HttpUrl = "https://juegosdeportivos.ecmadrid.org/".toHttpUrl()
-        const val SEASON_ID = 12 // TEMPORADA 2026-2027, the active one (inline in the site's pages)
+        /**
+         * TEMPORADA 2026-2027: this build's season, and the floor. The site's current one is read from its
+         * calendar page weekly (SeasonWatch → Settings.activeSeasonId): a new season needs no release.
+         */
+        const val SEASON_ID = 12
         private const val MIN_GAP_MS = 350L
         private const val MAX_ATTEMPTS = 3
         private const val MAX_BODY_BYTES = 4L * 1024 * 1024

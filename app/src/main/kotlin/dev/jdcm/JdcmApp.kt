@@ -18,6 +18,7 @@ import dev.jdcm.data.EcmApi
 import dev.jdcm.data.GroupCache
 import dev.jdcm.data.KidStore
 import dev.jdcm.data.Repository
+import dev.jdcm.data.SeasonWatch
 import dev.jdcm.data.Settings
 import dev.jdcm.data.SyncMode
 import dev.jdcm.diag.DiagLog
@@ -54,7 +55,12 @@ class AppContainer(val app: Application) {
     val weather = dev.jdcm.data.WeatherRepo(app, http)
     /** Whether this process already counted a showing of the strip legend (once per opening). */
     @Volatile var stripLegendCounted = false
-    val repository = Repository(scope, api, groups, kids, onChanges = { notifier.changes(it) }, onFetched = { Reminders.rearm(app) })
+    val repository = Repository(
+        scope, api, groups, kids,
+        onChanges = { notifier.changes(it) },
+        onFetched = { Reminders.rearm(app) },
+        seasonId = { settings.activeSeasonId },
+    )
 }
 
 class JdcmApp : Application(), SingletonImageLoader.Factory {
@@ -82,6 +88,7 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
         if (container.settings.scheduledForVersion != BuildConfig.VERSION_CODE) {
             SyncWorker.schedule(this)
             container.settings.scheduledForVersion = BuildConfig.VERSION_CODE
+            container.settings.workerScheduledAtMs = System.currentTimeMillis()
         }
 
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -94,6 +101,8 @@ class JdcmApp : Application(), SingletonImageLoader.Factory {
                     // Groups looked at once (explorer, team search) and untouched for a month go.
                     val keep = container.kids.current().map { it.groupId }.toSet()
                     container.groups.prune(keep, System.currentTimeMillis() - 30L * 24 * 3600 * 1000)
+                    // Which season the site is on (weekly at most): a new one needs no release.
+                    SeasonWatch.check(container, "shown")
                 }
             }
             override fun onStop(owner: LifecycleOwner) = DiagLog.i("App", "hidden")

@@ -125,4 +125,34 @@ class SiteParserTest {
         val all = page.matches + page.neighbours.flatMap { it.second }
         assertEquals(1, all.count { !it.scoreKnown })
     }
+
+    @Test
+    fun `the active season is read from the calendar page's season picker`() {
+        val s = SiteParser.activeSeason(fixture("calendario_temporada.html"))
+        assertNotNull(s)
+        assertEquals(12, s!!.id)
+        assertEquals("TEMPORADA 2026-2027", s.name)
+        assertEquals("2026-2027", s.years)
+    }
+
+    @Test
+    fun `a new season is taken from the picker, or else from the newest active one`() {
+        val picker = { data: String, value: String ->
+            "<script>\$(\"#cmbCalendarioTemporada\").dxSelectBox({\"dataSource\":{\"store\":new DevExpress.data.ArrayStore({\"data\":[$data]})}," +
+                "\"displayExpr\":\"Nombre\",\"valueExpr\":\"Id\"$value});</script>"
+        }
+        val seasons = """{"Id":13,"Nombre":"TEMPORADA 2027-2028","Inicio":new Date(2027, 6, 1),"Activa":true},""" +
+            """{"Id":12,"Nombre":"TEMPORADA 2026-2027","Inicio":new Date(2026, 6, 1),"Activa":false}"""
+        assertEquals(13, SiteParser.activeSeason(picker(seasons, ",\"value\":13"))?.id)
+        assertEquals(13, SiteParser.activeSeason(picker(seasons, ""))?.id, "no value: the newest active one")
+        assertEquals(12, SiteParser.activeSeason(picker(seasons, ",\"value\":12"))?.id, "the picker's own value wins")
+        assertEquals("TEMPORADA 2026-2027", SiteParser.activeSeason(picker(seasons, ",\"value\":12"))?.name)
+    }
+
+    @Test
+    fun `a page without the season picker gives no season`() {
+        assertNull(SiteParser.activeSeason("<html><body>Iniciar sesión</body></html>"))
+        assertNull(SiteParser.activeSeason(fixture("jornada_grupo.json")))
+        assertNull(SiteParser.activeSeason("""<script>$("#cmbCalendarioTemporada").dxSelectBox({"value":12});</script>"""))
+    }
 }

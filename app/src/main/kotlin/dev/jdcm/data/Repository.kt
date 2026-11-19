@@ -64,6 +64,8 @@ class Repository(
     /** After any sync that brought data: the eve-of-match alarm may need to move. */
     private val onFetched: () -> Unit = {},
     private val nowMs: () -> Long = System::currentTimeMillis,
+    /** The season the explorer and the team search list (Settings.activeSeasonId, read by SeasonWatch). */
+    private val seasonId: () -> Int = { EcmApi.SEASON_ID },
 ) {
     val snapshots: StateFlow<Map<Int, GroupSnapshot>> = cache.snapshots
 
@@ -269,8 +271,10 @@ class Repository(
         return v
     }
 
-    suspend fun competitions(sportId: Int, includeClosed: Boolean): List<Competition> =
-        memo("comp:$sportId:$includeClosed") { api.competitions(sportId, EcmApi.SEASON_ID, includeClosed) }
+    suspend fun competitions(sportId: Int, includeClosed: Boolean): List<Competition> {
+        val season = seasonId()
+        return memo("comp:$season:$sportId:$includeClosed") { api.competitions(sportId, season, includeClosed) }
+    }
 
     suspend fun categories(competitionId: Int): List<Category> =
         memo("cat:$competitionId") { api.categories(competitionId) }

@@ -79,6 +79,28 @@ object Perms {
     fun askBatteryUnrestricted(ctx: Context) =
         start(ctx, Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${ctx.packageName}")), "battery")
 
+    /** App info: battery («Restringida»), and the maker's own background switches hang from it. */
+    fun openAppDetails(ctx: Context) =
+        start(ctx, Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${ctx.packageName}")), "app details")
+
+    fun openChannelSettings(ctx: Context, channelId: String) = start(
+        ctx,
+        Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+            .putExtra(Settings.EXTRA_CHANNEL_ID, channelId),
+        "channel",
+    )
+
+    /** Data saver's per-app exemption («Datos sin restricciones»). */
+    fun openDataSaverSettings(ctx: Context) =
+        start(ctx, Intent(Settings.ACTION_IGNORE_BACKGROUND_DATA_RESTRICTIONS_SETTINGS, Uri.parse("package:${ctx.packageName}")), "data saver")
+
+    /** «Alarmas y recordatorios» (Android 12+; only 12/12L can take it away from this app). */
+    fun openExactAlarmSettings(ctx: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return openAppDetails(ctx)
+        start(ctx, Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${ctx.packageName}")), "exact alarms")
+    }
+
     private fun start(ctx: Context, i: Intent, what: String) {
         // From a non-Activity context Android refuses without a new task (0.2.0's first build did).
         if (ctx !is android.app.Activity) i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

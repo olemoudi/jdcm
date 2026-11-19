@@ -27,6 +27,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Directions
 import androidx.compose.material.icons.outlined.EditCalendar
 import androidx.compose.material.icons.outlined.Event
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material.icons.outlined.Share
@@ -47,19 +48,24 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.jdcm.R
 import dev.jdcm.core.model.MADRID
 import dev.jdcm.core.model.Match
 import dev.jdcm.core.model.MatchStatus
 import dev.jdcm.core.model.Team
+import dev.jdcm.core.schedule.Schedule
 import dev.jdcm.core.standings.Outcome
+import dev.jdcm.core.standings.PointsRule
+import dev.jdcm.core.standings.StandingRow
 import dev.jdcm.core.standings.Standings
 import dev.jdcm.data.GroupRef
 import dev.jdcm.diag.DiagLog
 import dev.jdcm.ui.LocalActions
 import dev.jdcm.ui.MatchArgs
 import dev.jdcm.ui.components.Crest
+import dev.jdcm.ui.components.FormDots
 import dev.jdcm.ui.components.Hairline
 import dev.jdcm.ui.format.Format
 import dev.jdcm.ui.theme.JdcmColors
@@ -136,12 +142,38 @@ fun MatchSheet(args: MatchArgs, onDismiss: () -> Unit, onTeam: (GroupRef, Int) -
                     dev.jdcm.ui.components.weatherTint(w).takeIf { w.rain >= 30 },
                 )
             }
-            durationMinutes(m)?.let { InfoRow(Icons.Outlined.Timer, stringResource(R.string.detail_duration), "$it min") }
+            m.durationMinutes?.let { InfoRow(Icons.Outlined.Timer, stringResource(R.string.detail_duration), "$it min") }
             if (m.modified) {
                 InfoRow(Icons.Outlined.Info, stringResource(R.string.status_modified), m.modifiedReason.ifBlank { stringResource(R.string.modified_explained) }, extra.modified)
             }
             if (m.status == MatchStatus.UNSCHEDULED || m.status == MatchStatus.POSTPONED) {
                 InfoRow(Icons.Outlined.Info, fmt.statusLabel(m).orEmpty(), stringResource(R.string.unscheduled_explained), extra.danger)
+            }
+            // How both teams come in (place and last five) for a match still to play, and the previous meeting.
+            val snaps by dev.jdcm.ui.LocalContainer.current.repository.snapshots.collectAsState()
+            val snap = args.ref?.let { snaps[it.groupId] }
+            if (snap != null && !m.isBye) {
+                val rows = remember(snap) { Standings.compute(snap.matches, PointsRule.forSport(snap.sport)) }
+                val home = rows.firstOrNull { it.team.id == m.home?.id }
+                val away = rows.firstOrNull { it.team.id == m.away?.id }
+                val meeting = remember(snap, m) { Schedule.previousMeeting(snap, m) }
+                val showForm = !m.hasResult && (home?.played ?: 0) + (away?.played ?: 0) > 0
+                if (showForm || meeting != null) Hairline()
+                if (showForm) {
+                    Text(
+                        stringResource(R.string.detail_form), style = MaterialTheme.typography.labelMedium, color = extra.muted,
+                        modifier = Modifier.padding(start = 50.dp, end = 16.dp, top = 10.dp),
+                    )
+                    FormRow(m.home, home, args.highlightTeamId)
+                    FormRow(m.away, away, args.highlightTeamId)
+                }
+                meeting?.let { p ->
+                    InfoRow(
+                        Icons.Outlined.History,
+                        stringResource(R.string.detail_meeting),
+                        "${p.home?.name.orEmpty()} ${p.homeScore} - ${p.awayScore} ${p.away?.name.orEmpty()}" + (p.day?.let { " · " + fmt.dayMonth(it) } ?: ""),
+                    )
+                }
             }
             if (args.ref != null) {
                 Hairline()
@@ -171,6 +203,29 @@ private fun BigTeam(team: Team?, m: Match, highlight: Int, modifier: Modifier, o
             team?.name ?: stringResource(R.string.rests), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center,
             fontWeight = if (won || team?.id == highlight) FontWeight.Bold else FontWeight.Normal, maxLines = 3,
         )
+    }
+}
+
+/** One team's place, points and last five results (oldest first), as the standings show them. */
+@Composable
+private fun FormRow(team: Team?, row: StandingRow?, highlight: Int) {
+    if (team == null) return
+    val extra = JdcmColors.extra
+    Row(Modifier.fillMaxWidth().heightIn(min = 40.dp).padding(start = 50.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Crest(team, 20.dp)
+        Spacer(Modifier.width(8.dp))
+        Text(
+            team.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, fontWeight = if (team.id == highlight) FontWeight.Bold else FontWeight.Normal,
+        )
+        Spacer(Modifier.width(8.dp))
+        if (row == null || row.played == 0) {
+            Text(stringResource(R.string.form_none), style = MaterialTheme.typography.labelMedium, color = extra.muted)
+        } else {
+            Text(stringResource(R.string.position_points, row.position, row.points), style = MaterialTheme.typography.labelMedium.merge(Tabular), color = extra.muted)
+            Spacer(Modifier.width(8.dp))
+            FormDots(row.form)
+        }
     }
 }
 
@@ -205,7 +260,7 @@ private fun addToCalendar(ctx: Context, m: Match, fmt: Format, who: String) {
         .putExtra(CalendarContract.Events.DESCRIPTION, "J${m.roundNumber} · JDCM")
     if (m.timeKnown && m.start != null) {
         val start = ZonedDateTime.of(m.start, MADRID)
-        val minutes = (durationMinutes(m) ?: 75).coerceIn(30, 180).toLong()
+        val minutes = (m.durationMinutes ?: 75).coerceIn(30, 180).toLong()
         i.putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, start.toInstant().toEpochMilli())
             .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, start.plus(Duration.ofMinutes(minutes)).toInstant().toEpochMilli())
     } else {
@@ -220,12 +275,6 @@ private fun addToCalendar(ctx: Context, m: Match, fmt: Format, who: String) {
         DiagLog.w("UI", "no calendar app")
     }
 }
-
-/** The site's "01:10:00" as 70; null when absent or zero. */
-private fun durationMinutes(m: Match): Int? = runCatching {
-    val p = m.duration.split(":")
-    p[0].toInt() * 60 + p[1].toInt()
-}.getOrNull()?.takeIf { it > 0 }
 
 private fun share(ctx: Context, m: Match, fmt: Format) {
     val lines = buildList {

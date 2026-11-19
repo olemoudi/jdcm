@@ -228,6 +228,7 @@ fun JdcmRoot(c: AppContainer, pendingOpen: MutableState<OpenRequest?>) {
                             onExplore = { nav.navigate(ExploreRoute) { launchSingleTop = true } },
                             onGroup = { go(it) },
                             onTeam = { go(it) },
+                            onEditKid = { go(KidEditorRoute(kidId = it, changeTeam = true)) },
                         )
                     }
                     composable<TablesRoute> {

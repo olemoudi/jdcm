@@ -9,6 +9,7 @@ import dev.jdcm.core.model.GroupedRound
 import dev.jdcm.core.model.Match
 import dev.jdcm.core.model.Round
 import dev.jdcm.core.model.RoundPage
+import dev.jdcm.core.model.Season
 import dev.jdcm.core.model.Team
 import dev.jdcm.core.model.Venue
 import kotlinx.serialization.json.Json
@@ -236,4 +237,58 @@ object SiteParser {
 
     fun date(s: String): LocalDate? = dateTime(s)?.toLocalDate()
         ?: runCatching { LocalDate.parse(s.take(10)) }.getOrNull()?.takeIf { it.year > 2000 }
+
+    // --- the season (HTML) ----------------------------------------------------------------------
+
+    /**
+     * Compiled on first use, apart from the parser: a pattern Android's ICU engine refuses (it is
+     * stricter than the JVM's the tests run on: a lone `}` is an error there) fails only the season
+     * read, which its caller survives, never every round page. Every brace is escaped.
+     */
+    private object SeasonPatterns {
+        // Braces escaped inside the sets too: ICU reads `{…}` in a set as a string element.
+        val entry = Regex("""\{[^\{\}]*"Id"\s*:\s*\d+[^\{\}]*\}""")
+        val id = Regex(""""Id"\s*:\s*(\d+)""")
+        val name = Regex(""""Nombre"\s*:\s*"((?:[^"\\]|\\.)*)"""")
+        val active = Regex(""""Activa"\s*:\s*true""")
+        val value = Regex(""""value"\s*:\s*(\d+)\s*\}\s*\)""")
+        val unicode = Regex("""\\u([0-9a-fA-F]{4})""")
+    }
+
+    /**
+     * The season the site's calendar page opens on, read from its season picker: the page writes the
+     * seasons inline (`$("#cmbCalendarioTemporada").dxSelectBox({… "data":[{"Id":12,"Nombre":"TEMPORADA
+     * 2026-2027",…,"Activa":true,…}, …] …, "value":12})`, measured 2026-11-19). The picker's own
+     * value first (what a visitor sees), else the newest season marked active; null when the page
+     * has no such picker (a login wall, a redesign): the caller keeps what it had.
+     */
+    fun activeSeason(html: String): Season? {
+        // The page's own script names the picker too (`….dxSelectBox("instance")`): every mention is
+        // tried, up to the end of its script, and the first one listing seasons is the picker.
+        var from = 0
+        while (true) {
+            val at = html.indexOf("cmbCalendarioTemporada", from).takeIf { it >= 0 } ?: return null
+            val end = html.indexOf("</script>", at).takeIf { it > at } ?: html.length
+            seasonIn(html.substring(at, end))?.let { return it }
+            from = at + 1
+        }
+    }
+
+    private fun seasonIn(call: String): Season? {
+        if (!call.contains(".dxSelectBox(")) return null
+        val p = SeasonPatterns
+        val seasons = p.entry.findAll(call).mapNotNull { e ->
+            val id = p.id.find(e.value)?.groupValues?.get(1)?.toIntOrNull() ?: return@mapNotNull null
+            val name = p.name.find(e.value)?.groupValues?.get(1)?.let(::unescape).orEmpty()
+            Triple(id, name, p.active.containsMatchIn(e.value))
+        }.filter { it.first > 0 }.toList()
+        if (seasons.isEmpty()) return null
+        val picked = p.value.find(call)?.groupValues?.get(1)?.toIntOrNull()?.let { v -> seasons.firstOrNull { it.first == v } }
+            ?: seasons.filter { it.third }.maxByOrNull { it.first }
+            ?: return null
+        return Season(picked.first, picked.second.trim())
+    }
+
+    private fun unescape(s: String): String =
+        SeasonPatterns.unicode.replace(s) { it.groupValues[1].toInt(16).toChar().toString() }.replace("\\\"", "\"").replace("\\/", "/")
 }

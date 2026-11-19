@@ -40,10 +40,22 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
             "installPermission=${dev.jdcm.ui.onboarding.Perms.canInstall(c.app)}" +
                 (if (!dev.jdcm.ui.onboarding.Perms.canInstall(c.app)) " UPDATES CANNOT INSTALL" else "") +
                 " bannerSnoozedUntil=${at(c.settings.installBannerSnoozedUntil)}",
+            "season site=#${c.settings.activeSeasonId} build=#${dev.jdcm.data.EcmApi.SEASON_ID} checked=${at(c.settings.seasonCheckedMs)}",
         ),
     )
+    // Home's health banner: what it reads and what it would say (the first one not snoozed is shown).
+    val health = runCatching {
+        val f = dev.jdcm.ui.home.readHealthFacts(c, kids.isNotEmpty(), nowMs)
+        val issues = dev.jdcm.core.policy.BackgroundHealth.issues(f, nowMs)
+        val snoozed = c.settings.healthSnoozed.filterValues { it > nowMs }
+        listOf(
+            dev.jdcm.ui.home.describeHealth(f, nowMs),
+            "issues=${issues.ifEmpty { listOf("none") }.joinToString()} snoozed=${snoozed.keys.ifEmpty { listOf("none") }.joinToString()} " +
+                "workerLastRun=${at(c.settings.workerLastRunMs)} scheduledAt=${at(c.settings.workerScheduledAtMs)} lateFixAt=${at(c.settings.healthLateFixAtMs)}",
+        )
+    }.getOrElse { listOf("unreadable: ${it.javaClass.simpleName}") }
     val kidLines = kids.map { k ->
-        "#${k.id.take(8)} sport=${k.sportId} comp=${k.competitionId} cat=${k.categoryId} group=#${k.groupId} team=#${k.teamId} color=${k.color}"
+        "#${k.id.take(8)} sport=${k.sportId} comp=${k.competitionId} cat=${k.categoryId} group=#${k.groupId} team=#${k.teamId} color=${k.color} season=${k.seasonId}"
     }.ifEmpty { listOf("none") }
 
     val groupLines = snaps.values.sortedBy { it.group.id }.map { g ->
@@ -92,6 +104,7 @@ suspend fun appDiagSections(c: AppContainer): List<DiagSection> {
     }
     return listOf(
         settings,
+        DiagSection("Health banner", health),
         DiagSection("Kids", kidLines),
         DiagSection("Groups (now ${at(nowMs)})", groupLines),
         DiagSection("Match states seen", states.ifEmpty { listOf("none") }),

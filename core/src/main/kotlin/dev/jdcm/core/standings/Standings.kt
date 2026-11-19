@@ -64,6 +64,15 @@ private class Tally {
     }
 }
 
+/**
+ * Where a team stands after a result: its place among [teams], and the place it held before (null
+ * when it had not played yet, or the table was not there): what a result notification adds.
+ */
+data class TablePlace(val position: Int, val teams: Int, val previous: Int? = null) {
+    /** Places gained (positive) or lost (negative) since [previous]; 0 when unknown or the same. */
+    val moved: Int get() = previous?.let { it - position } ?: 0
+}
+
 object Standings {
     private val collator: Collator = Collator.getInstance(Locale.forLanguageTag("es-ES")).apply { strength = Collator.PRIMARY }
 
@@ -118,6 +127,17 @@ object Standings {
             out += r.copy(position = if (tied) prev.position else i + 1)
         }
         return out
+    }
+
+    /**
+     * [teamId]'s place in [after], and its place in [before] if it had played by then. Null when the
+     * team has no row or has not played (a table of zeros says nothing).
+     */
+    fun place(before: List<Match>?, after: List<Match>, teamId: Int, rule: PointsRule): TablePlace? {
+        val now = compute(after, rule)
+        val row = now.firstOrNull { it.team.id == teamId }?.takeIf { it.played > 0 } ?: return null
+        val prev = before?.let { b -> compute(b, rule).firstOrNull { it.team.id == teamId }?.takeIf { it.played > 0 }?.position }
+        return TablePlace(row.position, now.size, prev)
     }
 
     /**

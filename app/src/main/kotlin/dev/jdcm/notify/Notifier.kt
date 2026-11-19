@@ -116,11 +116,16 @@ class Notifier(private val context: Context, private val settings: Settings) {
         }
     }
 
-    fun reminder(kid: Kid, m: Match) {
+    /** [clash]: a sibling's match the same day, too close in time at another field (Clashes). */
+    fun reminder(kid: Kid, m: Match, clash: Pair<Kid, Match>? = null) {
         val opponent = m.opponentOf(kid.teamId)?.name.orEmpty()
         val time = if (m.timeKnown) fmt.time(m) else context.getString(R.string.time_tbc)
-        val text = context.getString(R.string.notif_reminder_text, time, opponent, fmt.venueLine(m.venue))
-        post(CH_REMINDERS, notificationId(m.id, 3), context.getString(R.string.notif_reminder_title, kid.name), text, kid, m, "Reminder")
+        var text = context.getString(R.string.notif_reminder_text, time, opponent, fmt.venueLine(m.venue))
+        if (clash != null) {
+            val (other, om) = clash
+            text += "\n" + context.getString(R.string.notif_clash, other.name, fmt.time(om), fmt.placeShort(om.venue))
+        }
+        post(CH_REMINDERS, notificationId(m.id, 3), context.getString(R.string.notif_reminder_title, kid.name), text, kid, m, if (clash != null) "Reminder+clash" else "Reminder")
     }
 
     /**
@@ -150,7 +155,19 @@ class Notifier(private val context: Context, private val settings: Settings) {
                     Outcome.LOSS -> context.getString(R.string.notif_result_loss, kid.name, mine, theirs)
                     Outcome.DRAW -> context.getString(R.string.notif_result_draw, kid.name, mine, theirs)
                 }
-                title to context.getString(R.string.notif_result_text, m.home?.name.orEmpty(), m.homeScore, m.awayScore, m.away?.name.orEmpty())
+                val score = context.getString(R.string.notif_result_text, m.home?.name.orEmpty(), m.homeScore, m.awayScore, m.away?.name.orEmpty())
+                // Where it leaves the team first (the news the title does not carry), then the score, then what comes next.
+                val place = c.place?.let { p ->
+                    context.getString(R.string.notif_result_place, p.position, p.teams) + when {
+                        p.moved > 0 -> " " + context.getString(R.string.notif_place_up, p.moved)
+                        p.moved < 0 -> " " + context.getString(R.string.notif_place_down, -p.moved)
+                        else -> ""
+                    }
+                }
+                val next = c.next?.takeIf { !it.isCancelled && !it.isBye }?.let { n ->
+                    context.getString(R.string.notif_result_next, fmt.whenLine(n), n.opponentOf(kid.teamId)?.name.orEmpty())
+                }
+                title to listOfNotNull(place, score, next).joinToString("\n")
             }
             is MatchChange.Rescheduled -> {
                 val firstTime = !c.before.timeKnown && m.timeKnown && c.before.day == m.day

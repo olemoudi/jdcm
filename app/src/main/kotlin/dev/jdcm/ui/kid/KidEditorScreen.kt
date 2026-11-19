@@ -110,11 +110,12 @@ fun KidEditorScreen(c: AppContainer, route: KidEditorRoute, onDone: () -> Unit, 
     var loaded by remember { mutableStateOf(route.kidId == null) }
     var name by rememberSaveable { mutableStateOf("") }
     var color by rememberSaveable { mutableIntStateOf(-1) }
-    var step by rememberSaveable { mutableStateOf(Step.NAME) }
+    // A new season's team: the name is known, straight to the sport (Back still reaches the name).
+    var step by rememberSaveable { mutableStateOf(if (route.changeTeam && route.kidId != null) Step.SPORT else Step.NAME) }
     var sportId by rememberSaveable { mutableIntStateOf(route.presetSportId) }
     var competition by remember { mutableStateOf<Competition?>(null) }
     var category by remember { mutableStateOf<Category?>(null) }
-    var changingTeam by rememberSaveable { mutableStateOf(route.kidId == null && route.presetTeamId == 0) }
+    var changingTeam by rememberSaveable { mutableStateOf((route.kidId == null && route.presetTeamId == 0) || route.changeTeam) }
     /** The stored child was copied into the fields once; after a rotation or process death the user's edits stand. */
     var seeded by rememberSaveable { mutableStateOf(false) }
     /** A new child's id, fixed for this editor: saving twice (a double tap) replaces, never duplicates. */
@@ -174,6 +175,8 @@ fun KidEditorScreen(c: AppContainer, route: KidEditorRoute, onDone: () -> Unit, 
                 teamId = t.team.id,
                 teamName = t.team.name,
                 crestPath = t.team.crestPath,
+                // The lists it was picked from are the site's current season's (Repository.competitions).
+                seasonId = c.settings.activeSeasonId,
             ),
         )
     }
